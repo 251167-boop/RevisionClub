@@ -16,9 +16,10 @@ function imageLoader({ src, quality = 100 }) {
 }
 
 export async function Post({ post, action, user }) {
+  const postSlug = post.slug ? post.slug : slugify(post.title);
   return (
-    <Link href={`/blog/${slugify(post.title)}`} style={{ textDecoration: 'none' }}>
-      <article className="post compact-post zoom" style={{ marginTop: '20px', position: 'relative' }}>
+    <article className="post compact-post zoom" style={{ marginTop: '20px', position: 'relative' }}>
+      <Link href={`/blog/${postSlug}`} style={{ textDecoration: 'none' }}>
         <div className="post-image">
           <Image
             loader={imageLoader}
@@ -48,17 +49,17 @@ export async function Post({ post, action, user }) {
             </div>
           </header>
           <p style={{ textDecoration: 'underline' }}>Click to view more!</p>
-
-          {/* 👇 Like button at bottom right */}
-          <form
-            action={action.bind(null, post.id)}
-            className={`like-form ${post.isLiked ? 'liked' : ''}`}
-          >
-            <LikeButton />
-          </form>
         </div>
-      </article>
-    </Link>
+      </Link>
+
+      {/* 👇 Like button at bottom right */}
+      <form
+        action={action.bind(null, post.id)}
+        className={`like-form ${post.isLiked ? 'liked' : ''}`}
+      >
+        <LikeButton />
+      </form>
+    </article>
   );
 }
 
@@ -84,7 +85,13 @@ export default function Posts({ posts, user }) {
 
   async function updatePost(postId) {
     updateOptimisticPosts(postId);
-    await togglePostLikeStatus(postId);
+    try {
+      await togglePostLikeStatus(postId);
+    } catch (error) {
+      // Roll back optimistic update on failure.
+      updateOptimisticPosts(postId);
+      throw error;
+    }
   }
 
   return (
