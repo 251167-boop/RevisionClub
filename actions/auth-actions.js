@@ -1,9 +1,11 @@
 "use server";
+import { checkAuthRate } from "@/lib/club/auth-limits";
 
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { hashUserPassword, verifyPassword } from "@/lib/hash";
 import { createUser, getUserByEmail } from "@/lib/user";
+import { db } from "@/lib/db";
 import { lucia, verifyAuth as _verifyAuth } from "@/lib/auth";
 
 //
@@ -22,10 +24,14 @@ export async function refreshSessionCookie() {
 
   if (session && session.fresh) {
     const sessionCookie = lucia.createSessionCookie(session.id);
-    cookies().set(sessionCookie.name, sessionCookie.value, sessionCookie.attributes);
+    (await cookies()).set(
+      sessionCookie.name,
+      sessionCookie.value,
+      sessionCookie.attributes,
+    );
   } else if (!session) {
     const blank = lucia.createBlankSessionCookie();
-    cookies().set(blank.name, blank.value, blank.attributes);
+    (await cookies()).set(blank.name, blank.value, blank.attributes);
   }
 
   return { user, session };
@@ -35,24 +41,39 @@ export async function refreshSessionCookie() {
 // ——— SIGNUP / LOGIN / LOGOUT ———
 //
 export async function signup(prevState, formData) {
-  const email = formData.get("email")?.trim();
-  const password = formData.get("password")?.trim();
-  const username = formData.get("username")?.trim();
+  const email = String(formData.get("email") || "").trim();
+  const password = String(formData.get("password") || "").trim();
+  const username = String(formData.get("username") || "").trim();
   const errors = {};
+  if (!checkAuthRate(email))
+    return {
+      errors: { email: "Too many attempts. Please try again in 15 minutes." },
+    };
 
   // Validate email
-  if (!email || !email.includes("@")) {
+  if (
+    !email ||
+    email.length > 200 ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  ) {
     errors.email = "Please enter a valid email address.";
   }
   // Validate password
-  if (!password || password.length < 8) {
+  if (!password || password.length < 8 || password.length > 256) {
     errors.password = "Password must be at least 8 characters long.";
   }
   // Validate username
-  if (!username || username.length < 3) {
-    errors.username = "Username is required and must be at least 3 characters long.";
-  } else if (username.includes(' ')) {
-    errors.username = 'Username cannot contain spaces.';
+  if (!username || username.length < 3 || username.length > 40) {
+    errors.username =
+      "Username is required and must be at least 3 characters long.";
+  } else if (
+    !/^[a-zA-Z0-9_-]+$/.test(username) ||
+    db
+      .prepare("SELECT 1 FROM users WHERE lower(username)=lower(?)")
+      .get(username)
+  ) {
+    errors.username =
+      "Choose an available username using letters, numbers, underscores or hyphens.";
     return { errors };
   }
 
@@ -67,12 +88,16 @@ export async function signup(prevState, formData) {
     // Create session and set cookie
     const session = await lucia.createSession(userId, {});
     const sessionCookie = lucia.createSessionCookie(session.id);
-    cookies().set(sessionCookie.name, sessionCookie.value, sessionCookie.attributes);
+    (await cookies()).set(
+      sessionCookie.name,
+      sessionCookie.value,
+      sessionCookie.attributes,
+    );
 
     // Redirect after successful setup
-    redirect(`/profile/${username}`);
+    redirect("/dashboard");
   } catch (error) {
-    if (error.code === "SQLITE_CONSTRAINT_UNIQUE") {
+    if (error.code?.startsWith("SQLITE_CONSTRAINT")) {
       return {
         errors: {
           email: "An account with that email already exists.",
@@ -85,9 +110,13 @@ export async function signup(prevState, formData) {
 }
 
 export async function login(prevState, formData) {
-  const email = formData.get("email")?.trim();
-  const password = formData.get("password")?.trim();
+  const email = String(formData.get("email") || "").trim();
+  const password = String(formData.get("password") || "").trim();
 
+  if (!checkAuthRate(email))
+    return {
+      errors: { email: "Too many attempts. Please try again in 15 minutes." },
+    };
   const existingUser = getUserByEmail(email);
   if (!existingUser) {
     return {
@@ -97,7 +126,10 @@ export async function login(prevState, formData) {
     };
   }
 
-  const valid = verifyPassword(existingUser.password, password);
+  const valid =
+    typeof password === "string" &&
+    password.length <= 256 &&
+    verifyPassword(existingUser.password, password);
   if (!valid) {
     return {
       errors: {
@@ -108,9 +140,13 @@ export async function login(prevState, formData) {
 
   const session = await lucia.createSession(existingUser.id, {});
   const sessionCookie = lucia.createSessionCookie(session.id);
-  cookies().set(sessionCookie.name, sessionCookie.value, sessionCookie.attributes);
+  (await cookies()).set(
+    sessionCookie.name,
+    sessionCookie.value,
+    sessionCookie.attributes,
+  );
 
-  redirect("/homepage");
+  redirect("/dashboard");
 }
 
 export async function logout() {
@@ -118,7 +154,7 @@ export async function logout() {
   if (session) {
     await lucia.invalidateSession(session.id);
     const blank = lucia.createBlankSessionCookie();
-    cookies().set(blank.name, blank.value, blank.attributes);
+    (await cookies()).set(blank.name, blank.value, blank.attributes);
   }
   redirect("/");
 }

@@ -39,3 +39,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Private local learning data and QA artifacts
+.data/
+*.db-wal
+*.db-shm
+.env.*
+!.env.example
+test-results/
+playwright-report/
+
+# Isolated browser-test build
+.next-e2e/
