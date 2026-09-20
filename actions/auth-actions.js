@@ -41,7 +41,7 @@ export async function refreshSessionCookie() {
 // ——— SIGNUP / LOGIN / LOGOUT ———
 //
 export async function signup(prevState, formData) {
-  const email = String(formData.get("email") || "").trim();
+  const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "").trim();
   const username = String(formData.get("username") || "").trim();
   const errors = {};
@@ -84,6 +84,7 @@ export async function signup(prevState, formData) {
   try {
     const hashedPassword = hashUserPassword(password);
     const userId = createUser(email, hashedPassword, username);
+    console.info("[auth] account created", { userId: String(userId) });
 
     // Create session and set cookie
     const session = await lucia.createSession(userId, {});
@@ -105,12 +106,15 @@ export async function signup(prevState, formData) {
         },
       };
     }
+    console.error("[auth] signup failed", {
+      code: error?.code || "unknown_error",
+    });
     throw error;
   }
 }
 
 export async function login(prevState, formData) {
-  const email = String(formData.get("email") || "").trim();
+  const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "").trim();
 
   if (!checkAuthRate(email))
@@ -119,6 +123,7 @@ export async function login(prevState, formData) {
     };
   const existingUser = getUserByEmail(email);
   if (!existingUser) {
+    console.info("[auth] login rejected", { reason: "unknown_email" });
     return {
       errors: {
         email: "Could not authenticate—please check your credentials.",
@@ -131,6 +136,7 @@ export async function login(prevState, formData) {
     password.length <= 256 &&
     verifyPassword(existingUser.password, password);
   if (!valid) {
+    console.info("[auth] login rejected", { reason: "invalid_password" });
     return {
       errors: {
         password: "Could not authenticate—please check your credentials.",
@@ -139,6 +145,7 @@ export async function login(prevState, formData) {
   }
 
   const session = await lucia.createSession(existingUser.id, {});
+  console.info("[auth] login accepted", { userId: String(existingUser.id) });
   const sessionCookie = lucia.createSessionCookie(session.id);
   (await cookies()).set(
     sessionCookie.name,
