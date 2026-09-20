@@ -145,13 +145,13 @@ export async function login(prevState, formData) {
   }
 
   const session = await lucia.createSession(existingUser.id, {});
-  console.info("[auth] login accepted", { userId: String(existingUser.id) });
   const sessionCookie = lucia.createSessionCookie(session.id);
   (await cookies()).set(
     sessionCookie.name,
     sessionCookie.value,
     sessionCookie.attributes,
   );
+  console.info("[auth] login session cookie set");
 
   redirect("/dashboard");
 }
