@@ -2,7 +2,8 @@ import { readJSON } from "@/lib/club/request-body.mjs";
 import { assertSameOrigin } from "@/lib/club/security";
 import { NextResponse } from "next/server";
 import { verifyAuth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { mysqlPool } from "@/lib/mysql";
+import { mysqlDashboard } from "@/lib/club/mysql-dashboard";
 import domain from "@/lib/club/service.cjs";
 import rules from "@/lib/club/rules.cjs";
 import {
@@ -14,7 +15,14 @@ import {
 import { randomUUID } from "node:crypto";
 import games from "@/lib/club/games.cjs";
 export const dynamic = "force-dynamic";
-const svc = domain.service(db);
+let sqliteServicePromise;
+async function sqliteService() {
+  if (!sqliteServicePromise)
+    sqliteServicePromise = import("@/lib/db").then(({ db }) =>
+      domain.service(db),
+    );
+  return sqliteServicePromise;
+}
 const throttle = globalThis.__clubThrottle || new Map();
 globalThis.__clubThrottle = throttle;
 function rate(uid, path) {
@@ -42,8 +50,15 @@ export async function GET(request, props) {
     let data;
     const q = new URL(request.url).searchParams;
     if (resource === "dashboard")
-      data = { ...svc.dashboard(uid), user, ai: aiAvailable() };
-    else if (resource === "papers")
+      data = mysqlPool
+        ? { ...(await mysqlDashboard(uid)), user, ai: aiAvailable() }
+        : {
+            ...(await sqliteService()).dashboard(uid),
+            user,
+            ai: aiAvailable(),
+          };
+    else if (resource === "papers") {
+      const svc = await sqliteService();
       data = key
         ? svc.paper(uid, key)
         : q.get("page")
@@ -61,53 +76,65 @@ export async function GET(request, props) {
               },
             )
           : svc.papers(uid, q.get("community") === "true");
-    else if (resource === "attempts") data = svc.attempt(uid, key);
-    else if (resource === "results")
-      data = key ? svc.review(uid, key) : svc.results(uid);
-    else if (resource === "groups")
-      data = key ? svc.group(uid, key) : svc.groups(uid);
-    else if (resource === "paper-draft")
-      data = svc.paperDraft(uid, q.get("group") || "");
-    else if (resource === "version-draft") data = svc.versionDraft(uid, key);
-    else if (resource === "assignments") data = svc.assignments(uid);
-    else if (resource === "friends") data = svc.friends(uid);
-    else if (resource === "mistakes") data = svc.mistakes(uid);
-    else if (resource === "progress") data = svc.progressHistory(uid);
-    else if (resource === "search") data = svc.globalSearch(uid, q.get("q"));
-    else if (resource === "challenges") data = svc.battles(uid);
-    else if (resource === "challenge-opponents")
-      data = svc.challengeOpponents(uid);
-    else if (resource === "leaderboard")
-      data = svc.leaderboard(
-        uid,
-        q.get("scope"),
-        q.get("range"),
-        q.get("category"),
-      );
-    else if (resource === "profile")
-      data = {
-        ...svc.stats(uid),
-        profile:
-          svc.get("SELECT school,bio FROM rc_profiles WHERE user_id=?", uid) ||
-          {},
-        user: svc.get("SELECT username,avatar_url FROM users WHERE id=?", uid),
-        preferences: svc.get(
-          "SELECT study_reminders,social_updates,achievement_updates FROM rc_notification_preferences WHERE user_id=?",
+    } else {
+      const svc = await sqliteService();
+      if (resource === "attempts") data = svc.attempt(uid, key);
+      else if (resource === "results")
+        data = key ? svc.review(uid, key) : svc.results(uid);
+      else if (resource === "groups")
+        data = key ? svc.group(uid, key) : svc.groups(uid);
+      else if (resource === "paper-draft")
+        data = svc.paperDraft(uid, q.get("group") || "");
+      else if (resource === "version-draft") data = svc.versionDraft(uid, key);
+      else if (resource === "assignments") data = svc.assignments(uid);
+      else if (resource === "friends") data = svc.friends(uid);
+      else if (resource === "mistakes") data = svc.mistakes(uid);
+      else if (resource === "progress") data = svc.progressHistory(uid);
+      else if (resource === "search") data = svc.globalSearch(uid, q.get("q"));
+      else if (resource === "challenges") data = svc.battles(uid);
+      else if (resource === "challenge-opponents")
+        data = svc.challengeOpponents(uid);
+      else if (resource === "leaderboard")
+        data = svc.leaderboard(
           uid,
-        ) || { study_reminders: 1, social_updates: 1, achievement_updates: 1 },
-        achievements: svc.all(
-          "SELECT * FROM rc_achievements WHERE user_id=?",
-          uid,
-        ),
-      };
-    else if (resource === "messages") {
-      data = svc.messages(uid, {
-        groupId: q.get("group") || null,
-        friendId: key,
-        before: q.get("before"),
-        limit: q.get("limit"),
-      });
-    } else return NextResponse.json({ error: "Not found" }, { status: 404 });
+          q.get("scope"),
+          q.get("range"),
+          q.get("category"),
+        );
+      else if (resource === "profile")
+        data = {
+          ...svc.stats(uid),
+          profile:
+            svc.get(
+              "SELECT school,bio FROM rc_profiles WHERE user_id=?",
+              uid,
+            ) || {},
+          user: svc.get(
+            "SELECT username,avatar_url FROM users WHERE id=?",
+            uid,
+          ),
+          preferences: svc.get(
+            "SELECT study_reminders,social_updates,achievement_updates FROM rc_notification_preferences WHERE user_id=?",
+            uid,
+          ) || {
+            study_reminders: 1,
+            social_updates: 1,
+            achievement_updates: 1,
+          },
+          achievements: svc.all(
+            "SELECT * FROM rc_achievements WHERE user_id=?",
+            uid,
+          ),
+        };
+      else if (resource === "messages") {
+        data = svc.messages(uid, {
+          groupId: q.get("group") || null,
+          friendId: key,
+          before: q.get("before"),
+          limit: q.get("limit"),
+        });
+      } else return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
     return NextResponse.json(data, {
       headers: { "Cache-Control": "no-store" },
     });
@@ -126,6 +153,7 @@ export async function POST(request, props) {
     const user = await identity(request, true),
       uid = user.id,
       key = params.path[1];
+    const svc = await sqliteService();
     const b = await readJSON(request);
     let data;
     if (resource === "version-regenerate") {
