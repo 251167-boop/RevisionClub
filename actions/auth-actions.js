@@ -46,7 +46,7 @@ export async function signup(prevState, formData) {
   const password = String(formData.get("password") || "").trim();
   const username = String(formData.get("username") || "").trim();
   const errors = {};
-  if (!checkAuthRate(email))
+  if (!(await checkAuthRate(email)))
     return {
       errors: { email: "Too many attempts. Please try again in 15 minutes." },
     };
@@ -121,7 +121,7 @@ export async function login(prevState, formData) {
     .toLowerCase();
   const password = String(formData.get("password") || "").trim();
 
-  if (!checkAuthRate(email))
+  if (!(await checkAuthRate(email)))
     return {
       errors: { email: "Too many attempts. Please try again in 15 minutes." },
     };
