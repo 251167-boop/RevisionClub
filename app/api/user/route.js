@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { verifyAuth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { getUser } from "@/lib/user";
 export async function GET() {
   const { user } = await verifyAuth();
   if (!user)
     return NextResponse.json({ error: "Sign in required." }, { status: 401 });
-  return NextResponse.json(
-    db
-      .prepare("SELECT id,username,avatar_url FROM users WHERE id=?")
-      .get(user.id),
-  );
+  const current = await getUser(user.id);
+  return NextResponse.json({
+    id: current.id,
+    username: current.username,
+    avatar_url: current.avatar_url,
+  });
 }

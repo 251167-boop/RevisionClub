@@ -9,14 +9,18 @@
     "lint": "eslint app components/club lib/club --no-error-on-unmatched-pattern",
     "test": "node --test tests/*.test.cjs",
     "db:migrate": "node scripts/migrate.cjs",
+    "db:migrate:mysql": "node scripts/migrate-sqlite-to-mysql.cjs",
+    "db:migrate:mysql-auth": "node scripts/migrate-bluehost-auth.cjs",
     "test:e2e": "playwright test",
     "format": "prettier --write app components lib actions tests"
   },
   "dependencies": {
+    "@lucia-auth/adapter-mysql": "^3.0.2",
     "@lucia-auth/adapter-sqlite": "^3.0.2",
     "better-sqlite3": "^11.10.0",
     "cloudinary": "^2.7.0",
     "lucia": "^3.2.2",
+    "mysql2": "^3.24.4",
     "next": "^16.3.5",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

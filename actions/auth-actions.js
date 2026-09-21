@@ -4,8 +4,7 @@ import { checkAuthRate } from "@/lib/club/auth-limits";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { hashUserPassword, verifyPassword } from "@/lib/hash";
-import { createUser, getUserByEmail } from "@/lib/user";
-import { db } from "@/lib/db";
+import { createUser, getUserByEmail, isUsernameTaken } from "@/lib/user";
 import { lucia, verifyAuth as _verifyAuth } from "@/lib/auth";
 
 //
@@ -41,7 +40,9 @@ export async function refreshSessionCookie() {
 // ——— SIGNUP / LOGIN / LOGOUT ———
 //
 export async function signup(prevState, formData) {
-  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const email = String(formData.get("email") || "")
+    .trim()
+    .toLowerCase();
   const password = String(formData.get("password") || "").trim();
   const username = String(formData.get("username") || "").trim();
   const errors = {};
@@ -68,9 +69,7 @@ export async function signup(prevState, formData) {
       "Username is required and must be at least 3 characters long.";
   } else if (
     !/^[a-zA-Z0-9_-]+$/.test(username) ||
-    db
-      .prepare("SELECT 1 FROM users WHERE lower(username)=lower(?)")
-      .get(username)
+    (await isUsernameTaken(username))
   ) {
     errors.username =
       "Choose an available username using letters, numbers, underscores or hyphens.";
@@ -83,7 +82,7 @@ export async function signup(prevState, formData) {
 
   try {
     const hashedPassword = hashUserPassword(password);
-    const userId = createUser(email, hashedPassword, username);
+    const userId = await createUser(email, hashedPassword, username);
     console.info("[auth] account created", { userId: String(userId) });
 
     // Create session and set cookie
@@ -98,7 +97,10 @@ export async function signup(prevState, formData) {
     // Redirect after successful setup
     redirect("/dashboard");
   } catch (error) {
-    if (error.code?.startsWith("SQLITE_CONSTRAINT")) {
+    if (
+      error.code?.startsWith("SQLITE_CONSTRAINT") ||
+      error.code === "ER_DUP_ENTRY"
+    ) {
       return {
         errors: {
           email: "An account with that email already exists.",
@@ -114,14 +116,16 @@ export async function signup(prevState, formData) {
 }
 
 export async function login(prevState, formData) {
-  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const email = String(formData.get("email") || "")
+    .trim()
+    .toLowerCase();
   const password = String(formData.get("password") || "").trim();
 
   if (!checkAuthRate(email))
     return {
       errors: { email: "Too many attempts. Please try again in 15 minutes." },
     };
-  const existingUser = getUserByEmail(email);
+  const existingUser = await getUserByEmail(email);
   if (!existingUser) {
     console.info("[auth] login rejected", { reason: "unknown_email" });
     return {
