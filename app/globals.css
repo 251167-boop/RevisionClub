@@ -845,6 +845,11 @@ button.stat-card:hover {
   color: #93452d;
   border-color: #eccdbc;
 }
+.notice.success {
+  background: #edf4e7;
+  color: var(--forest);
+  border-color: #cbd9bd;
+}
 .loading {
   padding: 70px;
   text-align: center;
@@ -1747,6 +1752,100 @@ button.mc-option[aria-pressed="true"] {
 .auth-card form button {
   width: 100%;
   margin: 20px 0;
+}
+.password-field {
+  display: block;
+  position: relative;
+  margin-top: 7px;
+}
+.password-field input {
+  margin-top: 0;
+  padding-right: 48px;
+}
+.auth-card form .password-eye {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+}
+.auth-card form .password-eye:hover {
+  background: #edf0e6;
+  color: var(--forest);
+}
+.password-eye svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.auth-card form .forgot-password {
+  display: block;
+  width: auto;
+  margin: 8px 0 18px auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--forest);
+  font-size: 12px;
+  font-weight: 600;
+}
+.auth-card form .forgot-password:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+.google-auth-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 24px;
+  padding: 11px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.auth-card .google-auth-form .google-auth-button {
+  margin: 24px 0 0;
+}
+.google-auth-button:hover {
+  border-color: #aeb9a6;
+  background: #f8f8f3;
+}
+.google-auth-button svg {
+  width: 19px;
+  height: 19px;
+}
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 0 4px;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
 }
 .landing {
   min-height: 100vh;

@@ -11,6 +11,7 @@
     "db:migrate": "node scripts/migrate.cjs",
     "db:migrate:mysql": "node scripts/migrate-sqlite-to-mysql.cjs",
     "db:migrate:mysql-auth": "node scripts/migrate-bluehost-auth.cjs",
+    "db:migrate:auth-features": "node scripts/migrate-auth-features.cjs",
     "test:e2e": "playwright test",
     "format": "prettier --write app components lib actions tests"
   },
