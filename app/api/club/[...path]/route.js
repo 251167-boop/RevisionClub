@@ -4,6 +4,15 @@ import { NextResponse } from "next/server";
 import { verifyAuth } from "@/lib/auth";
 import { mysqlPool } from "@/lib/mysql";
 import { mysqlDashboard } from "@/lib/club/mysql-dashboard";
+import {
+  deleteMysqlVersionDraft,
+  mysqlFiles,
+  mysqlPaperDraft,
+  mysqlVersionDraft,
+  mysqlVersionEditContext,
+  saveMysqlPaperDraft,
+  saveMysqlVersionDraft,
+} from "@/lib/club/mysql-drafts";
 import domain from "@/lib/club/service.cjs";
 import rules from "@/lib/club/rules.cjs";
 import {
@@ -22,6 +31,49 @@ async function sqliteService() {
       domain.service(db),
     );
   return sqliteServicePromise;
+}
+
+function mirrorFiles(svc, files) {
+  for (const file of files) {
+    svc.run(
+      `INSERT INTO rc_files(id,owner_id,name,purpose,mime,content,extracted,created_at)
+       VALUES(?,?,?,?,?,?,?,?)
+       ON CONFLICT(id) DO UPDATE SET
+         name=excluded.name,
+         purpose=excluded.purpose,
+         mime=excluded.mime,
+         content=excluded.content,
+         extracted=excluded.extracted`,
+      file.id,
+      file.owner_id,
+      file.name,
+      file.purpose,
+      file.mime,
+      file.content,
+      file.extracted || "",
+      file.created_at,
+    );
+  }
+}
+
+async function ownedFiles(svc, userId, ids) {
+  const uniqueIds = [...new Set((ids || []).map(String))];
+  if (!uniqueIds.length) return [];
+  if (!mysqlPool)
+    return uniqueIds.map((id) => {
+      const file = svc.get(
+        "SELECT * FROM rc_files WHERE id=? AND owner_id=?",
+        id,
+        userId,
+      );
+      if (!file) throw new Error("File access denied.");
+      return file;
+    });
+
+  const files = await mysqlFiles(userId, uniqueIds);
+  if (files.length !== uniqueIds.length) throw new Error("File access denied.");
+  mirrorFiles(svc, files);
+  return files;
 }
 const throttle = globalThis.__clubThrottle || new Map();
 globalThis.__clubThrottle = throttle;
@@ -84,8 +136,13 @@ export async function GET(request, props) {
       else if (resource === "groups")
         data = key ? svc.group(uid, key) : svc.groups(uid);
       else if (resource === "paper-draft")
-        data = svc.paperDraft(uid, q.get("group") || "");
-      else if (resource === "version-draft") data = svc.versionDraft(uid, key);
+        data = mysqlPool
+          ? await mysqlPaperDraft(uid, q.get("group") || "")
+          : svc.paperDraft(uid, q.get("group") || "");
+      else if (resource === "version-draft")
+        data = mysqlPool
+          ? await mysqlVersionDraft(uid, key)
+          : svc.versionDraft(uid, key);
       else if (resource === "assignments") data = svc.assignments(uid);
       else if (resource === "friends") data = svc.friends(uid);
       else if (resource === "mistakes") data = svc.mistakes(uid);
@@ -158,7 +215,9 @@ export async function POST(request, props) {
     let data;
     if (resource === "version-regenerate") {
       rate(uid, "generate");
-      const context = svc.versionEditContext(uid, key);
+      const context = mysqlPool
+        ? await mysqlVersionEditContext(uid, key)
+        : svc.versionEditContext(uid, key);
       data = await regenerateQuestions(
         context.settings,
         context.files,
@@ -168,28 +227,24 @@ export async function POST(request, props) {
         },
         b.questionIds,
       );
-      svc.saveVersionDraft(uid, key, {
+      const draft = {
         content: data,
         answerKey: data.answerKey,
         keySource: "AI-generated marking scheme",
-      });
+      };
+      if (mysqlPool) await saveMysqlVersionDraft(uid, key, draft);
+      else svc.saveVersionDraft(uid, key, draft);
     } else if (resource === "version-draft")
-      data = svc.saveVersionDraft(uid, key, b);
+      data = mysqlPool
+        ? await saveMysqlVersionDraft(uid, key, b)
+        : svc.saveVersionDraft(uid, key, b);
     else if (resource === "generate" || resource === "regenerate") {
       rate(uid, "generate");
       rules.validSubject(b.subject);
       if (b.groupId) svc.groupSubject(uid, b.groupId, b.subject);
       const ids = b.fileIds || [];
       if (ids.length > 8) throw new Error("Use up to 8 files.");
-      const files = ids.map((id) => {
-        const f = svc.get(
-          "SELECT * FROM rc_files WHERE id=? AND owner_id=?",
-          id,
-          uid,
-        );
-        if (!f) throw new Error("File access denied.");
-        return f;
-      });
+      const files = await ownedFiles(svc, uid, ids);
       data =
         resource === "regenerate"
           ? await regenerateQuestions(
@@ -199,7 +254,7 @@ export async function POST(request, props) {
               b.questionIds,
             )
           : await generatePaper(b, files);
-      svc.savePaperDraft(uid, b.groupId || "", {
+      const draft = {
         settings: { ...b, title: b.title || data.title },
         files: files.map((f) => ({
           id: f.id,
@@ -209,10 +264,15 @@ export async function POST(request, props) {
         content: data,
         answerKey: data.answerKey,
         keySource: "AI-generated marking scheme",
-      });
+      };
+      if (mysqlPool) await saveMysqlPaperDraft(uid, b.groupId || "", draft);
+      else svc.savePaperDraft(uid, b.groupId || "", draft);
     } else if (resource === "paper-draft")
-      data = svc.savePaperDraft(uid, b.groupId || "", b.draft);
+      data = mysqlPool
+        ? await saveMysqlPaperDraft(uid, b.groupId || "", b.draft)
+        : svc.savePaperDraft(uid, b.groupId || "", b.draft);
     else if (resource === "papers") {
+      await ownedFiles(svc, uid, b.fileIds || []);
       data = svc.savePaper(
         uid,
         b,
@@ -220,7 +280,11 @@ export async function POST(request, props) {
         b.answerKey,
         b.keySource || "Human-provided answer key",
       );
-      if (!b.paperId) svc.savePaperDraft(uid, b.groupId || "", null);
+      if (mysqlPool) {
+        if (!b.paperId) await saveMysqlPaperDraft(uid, b.groupId || "", null);
+        if (b.sourceVersionId)
+          await deleteMysqlVersionDraft(uid, b.sourceVersionId);
+      } else if (!b.paperId) svc.savePaperDraft(uid, b.groupId || "", null);
     } else if (resource === "attempts")
       data = svc.startAttempt(uid, b.versionId, b.assignmentId || null);
     else if (resource === "answers")
