@@ -3,7 +3,6 @@ import { readBody } from "@/lib/club/request-body.mjs";
 import { assertSameOrigin } from "@/lib/club/security";
 import { NextResponse } from "next/server";
 import { verifyAuth } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { mysqlPool } from "@/lib/mysql";
 import { mysqlFileUsage, saveMysqlFile } from "@/lib/club/mysql-drafts";
 import { randomUUID } from "node:crypto";
@@ -61,19 +60,21 @@ export async function POST(request) {
       throw new Error(
         "Text file is too long. Split it into smaller materials.",
       );
+    let sqliteDb = null;
     const total = mysqlPool
       ? await mysqlFileUsage(user.id)
-      : db
+      : ((sqliteDb = (await import("@/lib/db")).db),
+        sqliteDb
           .prepare(
             "SELECT COALESCE(SUM(length(content)),0) n FROM rc_files WHERE owner_id=?",
           )
-          .get(user.id).n;
+          .get(user.id).n);
     if (total + buf.length > 100 * 1024 * 1024)
       throw new Error("Upload allowance of 100 MB reached.");
     const id = randomUUID(),
       name = String(file.name).slice(0, 200),
       createdAt = new Date().toISOString();
-    if (mysqlPool)
+    if (mysqlPool) {
       await saveMysqlFile({
         id,
         owner_id: user.id,
@@ -84,18 +85,18 @@ export async function POST(request) {
         extracted,
         created_at: createdAt,
       });
-    // The club service is still synchronous SQLite. Mirror the file in the
-    // active instance so saving a generated paper can link it immediately.
-    db.prepare("INSERT INTO rc_files VALUES(?,?,?,?,?,?,?,?)").run(
-      id,
-      user.id,
-      name,
-      purpose,
-      mime,
-      buf,
-      extracted,
-      createdAt,
-    );
+    } else {
+      sqliteDb.prepare("INSERT INTO rc_files VALUES(?,?,?,?,?,?,?,?)").run(
+        id,
+        user.id,
+        name,
+        purpose,
+        mime,
+        buf,
+        extracted,
+        createdAt,
+      );
+    }
     return NextResponse.json({
       id,
       name,
