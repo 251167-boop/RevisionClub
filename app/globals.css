@@ -1692,37 +1692,209 @@ button.mc-option[aria-pressed="true"] {
   display: block;
   color: var(--muted);
 }
-.game-icon {
-  display: block;
-  font-size: 50px;
-  color: var(--olive);
-  margin-bottom: 15px;
-}
-.game-card h2 {
-  margin-top: 15px;
-}
-.game-questions {
+.minigame-progress {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 15px;
-  margin-bottom: 25px;
+  grid-template-columns: repeat(3, 1fr);
+  max-width: 760px;
+  margin: 0 auto 30px;
+  padding: 0;
+  list-style: none;
 }
-.game-questions label {
+.minigame-progress li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  text-align: center;
+}
+.minigame-progress li::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  top: 16px;
+  left: calc(50% + 21px);
+  width: calc(100% - 42px);
+  height: 1px;
+  background: var(--line);
+}
+.minigame-progress li:last-child::after {
+  display: none;
+}
+.minigame-progress li > span {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--paper);
+  font-size: 11px;
+  font-weight: 700;
+}
+.minigame-progress li.current,
+.minigame-progress li.complete {
+  color: var(--forest);
+}
+.minigame-progress li.current > span {
+  border-color: var(--forest);
+  box-shadow: 0 0 0 5px #e6ebda;
+}
+.minigame-progress li.complete > span {
+  border-color: var(--forest);
+  background: var(--forest);
+  color: white;
+}
+.minigame-progress small {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+.minigame-generator-card,
+.minigame-play-placeholder {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 34px;
+}
+.minigame-step-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  margin-bottom: 26px;
+}
+.minigame-step-heading .step-number {
+  flex: 0 0 27px;
+  margin-top: 1px;
+}
+.minigame-step-heading h2,
+.minigame-play-placeholder h2 {
+  margin: 10px 0 6px;
+}
+.minigame-upload {
+  min-height: 190px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.minigame-files {
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+}
+.minigame-files > div {
   display: flex;
   align-items: center;
-  gap: 15px;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.minigame-files b,
+.minigame-files small {
+  display: block;
+}
+.minigame-files small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.minigame-files button {
+  padding: 7px 11px;
+}
+.minigame-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 26px;
+}
+.mode-bubbles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
+  max-width: 700px;
+  margin: 36px auto;
+}
+.mode-bubble {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: #f5f7ee;
+  color: var(--forest);
+}
+.mode-bubble:hover,
+.mode-bubble[aria-checked="true"] {
+  border-color: var(--forest);
+  background: #e7edda;
+  box-shadow: 0 0 0 6px #f0f3e8;
+  transform: translateY(-2px);
+}
+.mode-bubble > span {
+  width: 32px;
+  height: 32px;
+  border: 1px dashed var(--olive);
+  border-radius: 50%;
+}
+.mode-bubble small {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.mode-bubble b {
+  font-family: var(--serif);
   font-size: 18px;
+  font-weight: 500;
 }
-.game-questions input {
-  width: 100px;
-  margin: 0;
+.minigame-loading {
+  max-width: 920px;
+  min-height: 420px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
-.game-result {
-  text-align: center;
-  padding: 60px;
+.minigame-orbit {
+  width: 76px;
+  height: 76px;
+  margin-bottom: 24px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  animation: minigame-spin 1.5s linear infinite;
 }
-.game-result h2 {
-  font-size: 60px;
+.minigame-orbit span {
+  display: block;
+  width: 18px;
+  height: 18px;
+  margin: -2px auto 0;
+  border-radius: 50%;
+  background: var(--olive);
+}
+@keyframes minigame-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.minigame-stage {
+  min-height: 360px;
+  margin-top: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed #aeb99e;
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 20% 20%, #e8eddd 0 4%, transparent 4.5%),
+    radial-gradient(circle at 80% 70%, #eef1e3 0 6%, transparent 6.5%), #f7f8f2;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.2em;
 }
 .auth-page {
   min-height: 100vh;
@@ -2207,8 +2379,35 @@ button.mc-option[aria-pressed="true"] {
   .list-row {
     flex-wrap: wrap;
   }
-  .game-questions {
-    grid-template-columns: 1fr;
+  .minigame-generator-card,
+  .minigame-play-placeholder {
+    padding: 22px;
+  }
+  .minigame-progress small {
+    font-size: 8px;
+  }
+  .mode-bubbles {
+    gap: 9px;
+  }
+  .mode-bubble {
+    gap: 4px;
+  }
+  .mode-bubble > span {
+    width: 23px;
+    height: 23px;
+  }
+  .mode-bubble b {
+    font-size: 13px;
+  }
+  .mode-bubble small {
+    font-size: 7px;
+  }
+  .minigame-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .minigame-stage {
+    min-height: 260px;
   }
   .message {
     max-width: 95%;
@@ -2338,48 +2537,6 @@ button.mc-option[aria-pressed="true"] {
     scroll-behavior: auto !important;
   }
 }
-.timeline-sort {
-  padding: 0;
-  list-style: none;
-  grid-column: 1/-1;
-}
-.timeline-sort li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid var(--line);
-  background: var(--paper);
-  padding: 12px;
-  border-radius: 8px;
-  margin: 8px 0;
-  cursor: grab;
-}
-.timeline-sort li span {
-  flex: 1;
-}
-.timeline-sort button {
-  padding: 4px 9px;
-}
-.game-questions:has(.timeline-sort) {
-  display: block;
-}
-.game-questions label:has(select) {
-  display: block;
-  font-size: 14px;
-}
-.cycle-diagram {
-  margin: 20px auto;
-  max-width: 650px;
-}
-.cycle-diagram svg {
-  width: 100%;
-  height: auto;
-}
-.cycle-diagram figcaption {
-  text-align: center;
-  font-size: 11px;
-  color: var(--muted);
-}
 .pagination {
   display: flex;
   align-items: center;
@@ -2505,15 +2662,6 @@ button.mc-option[aria-pressed="true"] {
   grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr);
   gap: 26px;
 }
-.revision-mix-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(220px, 1fr) auto;
-  align-items: end;
-  gap: 20px;
-}
-.revision-mix-card label {
-  margin: 0;
-}
 .load-older {
   display: flex;
   margin: 0 auto 18px;
@@ -2528,8 +2676,7 @@ button.mc-option[aria-pressed="true"] {
     align-items: stretch;
     flex-direction: column;
   }
-  .exam-planner,
-  .revision-mix-card {
+  .exam-planner {
     grid-template-columns: 1fr;
   }
   .trend-chart {
