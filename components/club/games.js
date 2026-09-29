@@ -1,16 +1,44 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Badge, ErrorBox, Heading } from "./ui";
+import { api, Badge, ErrorBox, Heading } from "./ui";
 
-const MODE_SLOTS = [1, 2, 3];
+const MODES = [
+  {
+    id: "matching-pairs",
+    number: "01",
+    icon: "↔",
+    title: "Matching Pairs",
+    description: "Connect each key term with the right meaning.",
+  },
+  {
+    id: "fill-in-the-blanks",
+    number: "02",
+    icon: "…",
+    title: "Fill in the Blanks",
+    description: "Complete source-based facts with the missing term.",
+  },
+  {
+    id: "unscramble-words",
+    number: "03",
+    icon: "Aa",
+    title: "Unscramble Words",
+    description: "Rebuild important vocabulary from mixed-up letters.",
+  },
+];
+
+const normalize = (value) =>
+  String(value || "")
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/\s+/g, " ");
 
 function Progress({ phase }) {
-  const current = phase;
+  const displayPhase = Math.min(phase, 3);
   const steps = [
     [1, "Upload material"],
     [2, "Choose a minigame"],
-    [3, "Build your game"],
+    [3, phase === 4 ? "Play your game" : "Build your game"],
   ];
   return (
     <ol className="minigame-progress" aria-label="Minigame creation progress">
@@ -18,15 +46,15 @@ function Progress({ phase }) {
         <li
           key={number}
           className={
-            number === current
+            number === displayPhase
               ? "current"
-              : number < current
+              : number < displayPhase
                 ? "complete"
                 : ""
           }
-          aria-current={number === current ? "step" : undefined}
+          aria-current={number === displayPhase ? "step" : undefined}
         >
-          <span>{number < current ? "✓" : number}</span>
+          <span>{number < displayPhase ? "✓" : number}</span>
           <small>{label}</small>
         </li>
       ))}
@@ -130,21 +158,283 @@ function MaterialUpload({ files, setFiles }) {
   );
 }
 
+function GameResult({ score, total, onReplay, onReset }) {
+  const percent = Math.round((score / total) * 100);
+  return (
+    <div className="minigame-result" role="status">
+      <span className="minigame-result-mark">{percent}%</span>
+      <Badge>ROUND COMPLETE</Badge>
+      <h3>
+        {score} of {total} correct
+      </h3>
+      <p className="muted">
+        {percent === 100
+          ? "Perfect round. You’ve got these ideas in hand."
+          : percent >= 60
+            ? "Good progress. Replay once to strengthen the tricky parts."
+            : "Keep going. A replay will help the key terms stick."}
+      </p>
+      <div className="actions">
+        <button onClick={onReplay}>Play again</button>
+        <button className="secondary" onClick={onReset}>
+          New minigame
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MatchingPairs({ game, onReplay, onReset }) {
+  const [left, setLeft] = useState(null);
+  const [right, setRight] = useState(null);
+  const [matched, setMatched] = useState(() => new Set());
+  const [mistakes, setMistakes] = useState(0);
+  const [feedback, setFeedback] = useState("");
+  const answers = [...game.rounds].reverse();
+
+  useEffect(() => {
+    if (!left || !right) return;
+    if (left === right) {
+      setMatched((current) => new Set([...current, left]));
+      setFeedback("match");
+    } else {
+      setMistakes((count) => count + 1);
+      setFeedback("miss");
+    }
+    const timer = window.setTimeout(() => {
+      setLeft(null);
+      setRight(null);
+      setFeedback("");
+    }, 550);
+    return () => window.clearTimeout(timer);
+  }, [left, right]);
+
+  if (matched.size === game.rounds.length)
+    return (
+      <GameResult
+        score={Math.max(0, game.rounds.length - mistakes)}
+        total={game.rounds.length}
+        onReplay={onReplay}
+        onReset={onReset}
+      />
+    );
+
+  return (
+    <div className="matching-game">
+      <div className="minigame-status">
+        <b>{matched.size} matched</b>
+        <span>{mistakes} incorrect attempts</span>
+      </div>
+      <p className="game-feedback" aria-live="polite">
+        {feedback === "match"
+          ? "That’s a match."
+          : feedback === "miss"
+            ? "Not quite—try another pair."
+            : "Choose one card from each column."}
+      </p>
+      <div className="matching-board">
+        <div>
+          <small>KEY TERMS</small>
+          {game.rounds.map((round) => (
+            <button
+              key={round.id}
+              className={
+                "match-card " +
+                (left === round.id ? "selected " : "") +
+                (matched.has(round.id) ? "matched" : "")
+              }
+              disabled={matched.has(round.id) || Boolean(feedback)}
+              onClick={() => setLeft(round.id)}
+            >
+              {round.prompt}
+            </button>
+          ))}
+        </div>
+        <div>
+          <small>MEANINGS</small>
+          {answers.map((round) => (
+            <button
+              key={round.id}
+              className={
+                "match-card " +
+                (right === round.id ? "selected " : "") +
+                (matched.has(round.id) ? "matched" : "")
+              }
+              disabled={matched.has(round.id) || Boolean(feedback)}
+              onClick={() => setRight(round.id)}
+            >
+              {round.answer}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WrittenRound({ game, onReplay, onReset }) {
+  const [index, setIndex] = useState(0);
+  const [value, setValue] = useState("");
+  const [score, setScore] = useState(0);
+  const [feedback, setFeedback] = useState(null);
+  const [finished, setFinished] = useState(false);
+  const round = game.rounds[index];
+  const unscramble = game.mode === "unscramble-words";
+
+  function check(event) {
+    event.preventDefault();
+    if (!value.trim() || feedback) return;
+    const correct = unscramble
+      ? normalize(value).replace(/\s+/g, "") ===
+        normalize(round.answer).replace(/\s+/g, "")
+      : normalize(value) === normalize(round.answer);
+    if (correct) setScore((current) => current + 1);
+    setFeedback(correct ? "correct" : "incorrect");
+  }
+
+  function next() {
+    if (index === game.rounds.length - 1) {
+      setFinished(true);
+      return;
+    }
+    setIndex((current) => current + 1);
+    setValue("");
+    setFeedback(null);
+  }
+
+  if (finished)
+    return (
+      <GameResult
+        score={score}
+        total={game.rounds.length}
+        onReplay={onReplay}
+        onReset={onReset}
+      />
+    );
+
+  return (
+    <div className="written-game">
+      <div className="minigame-status">
+        <b>
+          Question {index + 1} of {game.rounds.length}
+        </b>
+        <span>{score} correct</span>
+      </div>
+      <div className="round-progress" aria-hidden="true">
+        <span
+          style={{ width: `${((index + 1) / game.rounds.length) * 100}%` }}
+        />
+      </div>
+      {unscramble && <div className="scrambled-word">{round.scrambled}</div>}
+      <h3 className={unscramble ? "game-clue" : "blank-prompt"}>
+        {round.prompt}
+      </h3>
+      {round.hint && <p className="muted game-hint">Hint: {round.hint}</p>}
+      <form onSubmit={check} className="game-answer-form">
+        <label htmlFor="minigame-answer">
+          {unscramble ? "Unscrambled word" : "Missing word or phrase"}
+        </label>
+        <div>
+          <input
+            id="minigame-answer"
+            value={value}
+            disabled={Boolean(feedback)}
+            autoComplete="off"
+            autoFocus
+            onChange={(event) => setValue(event.target.value)}
+            placeholder="Type your answer"
+          />
+          {!feedback && <button disabled={!value.trim()}>Check answer</button>}
+        </div>
+      </form>
+      {feedback && (
+        <div className={`answer-feedback ${feedback}`} role="status">
+          <div>
+            <b>{feedback === "correct" ? "Correct!" : "Keep this one."}</b>
+            {feedback === "incorrect" && <span>Answer: {round.answer}</span>}
+          </div>
+          <button onClick={next}>
+            {index === game.rounds.length - 1 ? "See results" : "Next →"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlaySpace({ game, files, onReset }) {
+  const [roundKey, setRoundKey] = useState(0);
+  const mode = MODES.find((item) => item.id === game.mode);
+  const replay = () => setRoundKey((key) => key + 1);
+  return (
+    <section className="card minigame-play-placeholder">
+      <div className="minigame-play-heading">
+        <div>
+          <Badge>{mode?.title || "MINIGAME"}</Badge>
+          <h2>{game.title}</h2>
+          <p className="muted">{game.instructions}</p>
+        </div>
+        <span className="game-source-count">
+          {files.length} source{files.length === 1 ? "" : "s"}
+        </span>
+      </div>
+      <div className="minigame-stage playable">
+        {game.mode === "matching-pairs" ? (
+          <MatchingPairs
+            key={roundKey}
+            game={game}
+            onReplay={replay}
+            onReset={onReset}
+          />
+        ) : (
+          <WrittenRound
+            key={roundKey}
+            game={game}
+            onReplay={replay}
+            onReset={onReset}
+          />
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function Games() {
   const [phase, setPhase] = useState(1);
   const [files, setFiles] = useState([]);
   const [mode, setMode] = useState(null);
+  const [game, setGame] = useState(null);
+  const [generationError, setGenerationError] = useState("");
+  const [generationAttempt, setGenerationAttempt] = useState(0);
 
   useEffect(() => {
-    if (phase !== 3) return;
-    const timer = window.setTimeout(() => setPhase(4), 1800);
-    return () => window.clearTimeout(timer);
-  }, [phase]);
+    if (phase !== 3 || !mode || !files.length) return;
+    let active = true;
+    setGame(null);
+    setGenerationError("");
+    api("minigame", {
+      mode,
+      fileIds: files.map((file) => file.id),
+    })
+      .then((result) => {
+        if (!active) return;
+        setGame(result);
+        setPhase(4);
+      })
+      .catch((error) => {
+        if (active) setGenerationError(error.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [phase, mode, files, generationAttempt]);
 
   function reset() {
     setPhase(1);
     setFiles([]);
     setMode(null);
+    setGame(null);
+    setGenerationError("");
   }
 
   return (
@@ -164,7 +454,7 @@ export default function Games() {
               <Badge>YOUR MATERIAL</Badge>
               <h2>What do you want to practise?</h2>
               <p className="muted">
-                Upload the notes, worksheet or sample paper you want the future
+                Upload the notes, worksheet or sample paper you want the
                 minigame to use.
               </p>
             </div>
@@ -191,8 +481,8 @@ export default function Games() {
               <Badge>GAME MODE</Badge>
               <h2>How should this revision feel?</h2>
               <p className="muted">
-                The game catalogue is being rebuilt. These slots reserve the
-                selection flow for the first modes.
+                Pick a mode and we’ll build a fresh round from your uploaded
+                material.
               </p>
             </div>
           </div>
@@ -201,19 +491,19 @@ export default function Games() {
             role="radiogroup"
             aria-label="Game mode"
           >
-            {MODE_SLOTS.map((slot) => (
+            {MODES.map((item) => (
               <button
-                key={slot}
+                key={item.id}
                 type="button"
                 role="radio"
-                aria-checked={mode === slot}
-                aria-label={`Placeholder game mode ${slot}`}
+                aria-checked={mode === item.id}
                 className="mode-bubble"
-                onClick={() => setMode(slot)}
+                onClick={() => setMode(item.id)}
               >
-                <span aria-hidden="true" />
-                <small>Mode {String(slot).padStart(2, "0")}</small>
-                <b>Coming soon</b>
+                <span aria-hidden="true">{item.icon}</span>
+                <small>Mode {item.number}</small>
+                <b>{item.title}</b>
+                <em>{item.description}</em>
               </button>
             ))}
           </div>
@@ -230,41 +520,47 @@ export default function Games() {
 
       {phase === 3 && (
         <section className="generation-screen minigame-loading" role="status">
-          <div className="minigame-orbit" aria-hidden="true">
-            <span />
-          </div>
-          <Badge>BUILDING YOUR PRACTICE</Badge>
-          <h2>Turning revision into a game…</h2>
-          <p className="muted">
-            Reading {files.length} material{files.length === 1 ? "" : "s"} and
-            preparing the play space.
-          </p>
+          {!generationError && (
+            <div className="minigame-orbit" aria-hidden="true">
+              <span />
+            </div>
+          )}
+          <Badge>
+            {generationError ? "GENERATION PAUSED" : "BUILDING YOUR PRACTICE"}
+          </Badge>
+          <h2>
+            {generationError
+              ? "Your game couldn’t be built yet."
+              : "Turning revision into a game…"}
+          </h2>
+          {generationError ? (
+            <>
+              <ErrorBox error={generationError} />
+              <div className="actions">
+                <button
+                  onClick={() => {
+                    setGenerationError("");
+                    setGenerationAttempt((attempt) => attempt + 1);
+                  }}
+                >
+                  Try again
+                </button>
+                <button className="secondary" onClick={() => setPhase(2)}>
+                  Choose another mode
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="muted">
+              Reading {files.length} material{files.length === 1 ? "" : "s"} and
+              preparing the play space.
+            </p>
+          )}
         </section>
       )}
 
-      {phase === 4 && (
-        <section className="card minigame-play-placeholder">
-          <div>
-            <Badge>PLAY SPACE</Badge>
-            <h2>Your minigame will live here.</h2>
-            <p className="muted">
-              The generator flow is ready. Game controls, questions, scoring and
-              rewards will be added with the first game mode.
-            </p>
-          </div>
-          <div className="minigame-stage" aria-label="Future minigame area">
-            <span>GAME AREA</span>
-          </div>
-          <div className="minigame-actions">
-            <span className="muted small">
-              {files.length} source material{files.length === 1 ? "" : "s"} ·
-              Mode {String(mode).padStart(2, "0")}
-            </span>
-            <button className="secondary" onClick={reset}>
-              Create another →
-            </button>
-          </div>
-        </section>
+      {phase === 4 && game && (
+        <PlaySpace game={game} files={files} onReset={reset} />
       )}
     </>
   );
