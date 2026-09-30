@@ -1,6 +1,85 @@
 "use client";
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
+
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const DIRECT_UPLOAD_BYTES = 4 * 1024 * 1024;
+const UPLOAD_CHUNK_BYTES = 3 * 1024 * 1024;
+
+export async function readApiResponse(response, fallback) {
+  const raw = await response.text();
+  let data = null;
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch {}
+  if (!response.ok) {
+    const platformTooLarge =
+      response.status === 413 ||
+      /request entity too large|function_payload_too_large|payload too large/i.test(
+        raw,
+      );
+    const error = new Error(
+      platformTooLarge
+        ? "This upload is too large for a single request. Revision Club will split files over 4 MB automatically; please retry."
+        : data?.error || fallback || "Something went wrong. Please retry.",
+    );
+    error.code = data?.code;
+    error.retryable = Boolean(data?.retryable);
+    error.reference = data?.reference;
+    throw error;
+  }
+  if (!data || typeof data !== "object")
+    throw new Error(fallback || "The server returned an invalid response.");
+  return data;
+}
+
+export async function uploadClubFile(file, purpose) {
+  if (!file || !file.size) throw new Error("Choose a non-empty file.");
+  if (file.size > MAX_UPLOAD_BYTES)
+    throw new Error("Upload a file up to 10 MB.");
+  if (file.size <= DIRECT_UPLOAD_BYTES) {
+    const form = new FormData();
+    form.set("file", file);
+    form.set("purpose", purpose);
+    const response = await fetch("/api/club/upload", {
+      method: "POST",
+      body: form,
+    });
+    return readApiResponse(response, "The material could not be uploaded.");
+  }
+
+  const uploadId = crypto.randomUUID();
+  const total = Math.ceil(file.size / UPLOAD_CHUNK_BYTES);
+  let result = null;
+  for (let index = 0; index < total; index++) {
+    const start = index * UPLOAD_CHUNK_BYTES;
+    const form = new FormData();
+    form.set("uploadId", uploadId);
+    form.set("index", String(index));
+    form.set("total", String(total));
+    form.set("originalSize", String(file.size));
+    form.set("name", file.name);
+    form.set("mime", file.type);
+    form.set("purpose", purpose);
+    form.set(
+      "chunk",
+      file.slice(start, Math.min(file.size, start + UPLOAD_CHUNK_BYTES)),
+      `${file.name}.part-${index + 1}`,
+    );
+    const response = await fetch("/api/club/upload/chunk", {
+      method: "POST",
+      body: form,
+    });
+    result = await readApiResponse(
+      response,
+      `Upload stopped at part ${index + 1} of ${total}. Please retry.`,
+    );
+  }
+  if (!result?.complete)
+    throw new Error("The upload did not finish. Please retry.");
+  return result;
+}
+
 export async function api(path, body) {
   const r = await fetch(
     "/api/club/" + path,
@@ -12,18 +91,13 @@ export async function api(path, body) {
         }
       : { cache: "no-store" },
   );
-  const data = await r.json();
-  if (!r.ok) {
-    const error = new Error(
-      (data.error || "Something went wrong. Please retry.") +
-        (data.reference ? ` Reference: ${data.reference}.` : ""),
-    );
-    error.code = data.code;
-    error.retryable = Boolean(data.retryable);
-    error.reference = data.reference;
+  try {
+    return await readApiResponse(r);
+  } catch (error) {
+    if (error.reference && !error.message.includes("Reference:"))
+      error.message += ` Reference: ${error.reference}.`;
     throw error;
   }
-  return data;
 }
 export function useData(path) {
   const [data, setData] = useState(null),

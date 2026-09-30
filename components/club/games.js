@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, Badge, ErrorBox, Heading } from "./ui";
+import { api, Badge, ErrorBox, Heading, uploadClubFile } from "./ui";
 
 const MODES = [
   {
@@ -78,19 +78,7 @@ function MaterialUpload({ files, setFiles }) {
     try {
       const uploaded = [];
       for (const file of incoming) {
-        const form = new FormData();
-        form.set("file", file);
-        form.set("purpose", "Revision Material");
-        const response = await fetch("/api/club/upload", {
-          method: "POST",
-          body: form,
-        });
-        const result = await response.json();
-        if (!response.ok)
-          throw new Error(
-            result.error || "The material could not be uploaded.",
-          );
-        uploaded.push(result);
+        uploaded.push(await uploadClubFile(file, "Revision Material"));
       }
       setFiles((current) => [...current, ...uploaded]);
     } catch (uploadError) {

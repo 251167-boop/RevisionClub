@@ -13,6 +13,7 @@ import {
   PaperCard,
   Badge,
   ActionForm,
+  uploadClubFile,
 } from "./ui";
 const { SUBJECTS, QUESTION_TYPES: QUESTION_TYPE_IDS } = rules;
 const QUESTION_TYPES = [
@@ -213,16 +214,7 @@ function Upload({ purpose, onAdd }) {
     setError("");
     try {
       for (const file of Array.from(files)) {
-        const form = new FormData();
-        form.set("file", file);
-        form.set("purpose", purpose);
-        const r = await fetch("/api/club/upload", {
-          method: "POST",
-          body: form,
-        });
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.error);
-        onAdd(d);
+        onAdd(await uploadClubFile(file, purpose));
       }
     } catch (e) {
       setError(e.message);
