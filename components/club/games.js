@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, Badge, ErrorBox, Heading, uploadClubFile } from "./ui";
+import {
+  api,
+  Badge,
+  ErrorBox,
+  Heading,
+  Loading,
+  uploadClubFile,
+  useData,
+} from "./ui";
 
 const MODES = [
   {
@@ -146,6 +154,182 @@ function MaterialUpload({ files, setFiles }) {
   );
 }
 
+function GameCard({ game, onPlay, onLike, showOwner = false }) {
+  const mode = MODES.find((item) => item.id === game.mode);
+  const created = game.createdAt
+    ? new Intl.DateTimeFormat(undefined, {
+        day: "numeric",
+        month: "short",
+      }).format(new Date(game.createdAt))
+    : "Recently";
+  return (
+    <article className="saved-game-card">
+      <div className="saved-game-icon" aria-hidden="true">
+        {mode?.icon || "◇"}
+      </div>
+      <div className="saved-game-copy">
+        <div className="saved-game-meta">
+          <span>
+            {mode?.title || "Minigame"} · {game.visibility || "private"}
+          </span>
+          <span>{created}</span>
+        </div>
+        <h3>{game.title}</h3>
+        <p>
+          {showOwner ? `By ${game.username} · ` : ""}
+          {game.rounds?.length || 0} rounds · {game.sourceCount || 0} source
+          {game.sourceCount === 1 ? "" : "s"}
+        </p>
+      </div>
+      <div className="saved-game-actions">
+        {game.visibility === "public" && (
+          <button
+            type="button"
+            className={`game-like ${game.liked ? "liked" : ""}`}
+            aria-pressed={game.liked}
+            aria-label={`${game.liked ? "Unlike" : "Like"} ${game.title}`}
+            onClick={() => onLike(game.id)}
+          >
+            {game.liked ? "♥" : "♡"} {game.likes || 0}
+          </button>
+        )}
+        <button type="button" onClick={() => onPlay(game)}>
+          Play →
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function GameLibrary({ onCreate, onPlay }) {
+  const [sort, setSort] = useState("recent");
+  const [showAllMine, setShowAllMine] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const {
+    data: mine,
+    error: mineError,
+    reload: reloadMine,
+  } = useData("minigame?scope=mine");
+  const {
+    data: community,
+    error: communityError,
+    reload: reloadCommunity,
+  } = useData(`minigame?scope=public&sort=${sort}`);
+
+  async function like(gameId) {
+    setActionError("");
+    try {
+      await api("minigame", { action: "toggle-like", gameId });
+      await Promise.all([reloadMine(), reloadCommunity()]);
+    } catch (error) {
+      setActionError(error.message);
+    }
+  }
+
+  const mineItems = mine?.items || [];
+  const publicItems = community?.items || [];
+  return (
+    <div className="minigame-library">
+      <section className="minigame-library-section">
+        <div className="section-heading minigame-library-heading">
+          <div>
+            <Badge>YOUR COLLECTION</Badge>
+            <h2>My minigames</h2>
+          </div>
+          {mineItems.length > 4 && (
+            <button
+              type="button"
+              className="text-link"
+              onClick={() => setShowAllMine((value) => !value)}
+            >
+              {showAllMine ? "Show recent" : "View all"} →
+            </button>
+          )}
+        </div>
+        {!mine ? (
+          <Loading error={mineError} />
+        ) : mineItems.length ? (
+          <div className={`my-games-row ${showAllMine ? "expanded" : ""}`}>
+            {(showAllMine ? mineItems : mineItems.slice(0, 4)).map((game) => (
+              <GameCard
+                key={game.id}
+                game={game}
+                onPlay={onPlay}
+                onLike={like}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="minigame-library-empty">
+            <span>◇</span>
+            <div>
+              <b>Your generated games will appear here.</b>
+              <p>Create one from revision material and it will be saved.</p>
+            </div>
+            <button onClick={onCreate}>Create minigame</button>
+          </div>
+        )}
+      </section>
+
+      <section className="minigame-library-section public-games-section">
+        <div className="section-heading minigame-library-heading">
+          <div>
+            <Badge>DISCOVER</Badge>
+            <h2>Public games</h2>
+            <p className="muted">
+              Play revision games shared by the community.
+            </p>
+          </div>
+          <div
+            className="game-sort"
+            role="group"
+            aria-label="Sort public games"
+          >
+            <button
+              className={sort === "liked" ? "active" : ""}
+              aria-pressed={sort === "liked"}
+              onClick={() => setSort("liked")}
+            >
+              Most liked
+            </button>
+            <button
+              className={sort === "recent" ? "active" : ""}
+              aria-pressed={sort === "recent"}
+              onClick={() => setSort("recent")}
+            >
+              Most recent
+            </button>
+          </div>
+        </div>
+        <ErrorBox error={actionError} />
+        {!community ? (
+          <Loading error={communityError} />
+        ) : publicItems.length ? (
+          <div className="public-games-grid">
+            {publicItems.map((game) => (
+              <GameCard
+                key={game.id}
+                game={game}
+                onPlay={onPlay}
+                onLike={like}
+                showOwner
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="minigame-library-empty public">
+            <span>↗</span>
+            <div>
+              <b>No public games yet.</b>
+              <p>Publish the first one for other students to practise.</p>
+            </div>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function GameResult({ score, total, onReplay, onReset }) {
   const percent = Math.round((score / total) * 100);
   return (
@@ -165,7 +349,7 @@ function GameResult({ score, total, onReplay, onReset }) {
       <div className="actions">
         <button onClick={onReplay}>Play again</button>
         <button className="secondary" onClick={onReset}>
-          New minigame
+          Back to games
         </button>
       </div>
     </div>
@@ -350,7 +534,7 @@ function WrittenRound({ game, onReplay, onReset }) {
   );
 }
 
-function PlaySpace({ game, files, onReset }) {
+function PlaySpace({ game, sourceCount, onReset }) {
   const [roundKey, setRoundKey] = useState(0);
   const mode = MODES.find((item) => item.id === game.mode);
   const replay = () => setRoundKey((key) => key + 1);
@@ -363,7 +547,7 @@ function PlaySpace({ game, files, onReset }) {
           <p className="muted">{game.instructions}</p>
         </div>
         <span className="game-source-count">
-          {files.length} source{files.length === 1 ? "" : "s"}
+          {sourceCount} source{sourceCount === 1 ? "" : "s"}
         </span>
       </div>
       <div className="minigame-stage playable">
@@ -388,9 +572,10 @@ function PlaySpace({ game, files, onReset }) {
 }
 
 export default function Games() {
-  const [phase, setPhase] = useState(1);
+  const [phase, setPhase] = useState(0);
   const [files, setFiles] = useState([]);
   const [mode, setMode] = useState(null);
+  const [visibility, setVisibility] = useState("private");
   const [game, setGame] = useState(null);
   const [generationError, setGenerationError] = useState("");
   const [generationAttempt, setGenerationAttempt] = useState(0);
@@ -402,6 +587,7 @@ export default function Games() {
     setGenerationError("");
     api("minigame", {
       mode,
+      visibility,
       fileIds: files.map((file) => file.id),
     })
       .then((result) => {
@@ -415,24 +601,55 @@ export default function Games() {
     return () => {
       active = false;
     };
-  }, [phase, mode, files, generationAttempt]);
+  }, [phase, mode, visibility, files, generationAttempt]);
 
-  function reset() {
-    setPhase(1);
+  function openLibrary() {
+    setPhase(0);
     setFiles([]);
     setMode(null);
+    setVisibility("private");
     setGame(null);
     setGenerationError("");
+  }
+
+  function startCreating() {
+    setFiles([]);
+    setMode(null);
+    setVisibility("private");
+    setGame(null);
+    setGenerationError("");
+    setPhase(1);
+  }
+
+  function playSaved(savedGame) {
+    setGame(savedGame);
+    setPhase(4);
   }
 
   return (
     <>
       <Heading
-        eyebrow="PRACTICE / MINIGAME GENERATOR"
-        title="Turn revision into play."
-        description="Bring the material. Choose a game. We’ll shape the practice around what you need to learn."
-      />
-      <Progress phase={phase} />
+        eyebrow="PRACTICE / MINIGAMES"
+        title={phase === 0 ? "Learn through play." : "Turn revision into play."}
+        description={
+          phase === 0
+            ? "Return to your games or discover a new way to practise."
+            : "Bring the material. Choose a game. We’ll shape the practice around what you need to learn."
+        }
+      >
+        {phase === 0 ? (
+          <button onClick={startCreating}>Create minigame →</button>
+        ) : (
+          <button className="secondary" onClick={openLibrary}>
+            ← Back to games
+          </button>
+        )}
+      </Heading>
+      {phase > 0 && <Progress phase={phase} />}
+
+      {phase === 0 && (
+        <GameLibrary onCreate={startCreating} onPlay={playSaved} />
+      )}
 
       {phase === 1 && (
         <section className="card minigame-generator-card">
@@ -495,11 +712,36 @@ export default function Games() {
               </button>
             ))}
           </div>
+          <fieldset className="game-visibility">
+            <legend>Who can see this minigame?</legend>
+            <div role="radiogroup" aria-label="Minigame visibility">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={visibility === "private"}
+                onClick={() => setVisibility("private")}
+              >
+                <span aria-hidden="true">⌂</span>
+                <b>Private</b>
+                <small>Only you can open and play it.</small>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={visibility === "public"}
+                onClick={() => setVisibility("public")}
+              >
+                <span aria-hidden="true">◎</span>
+                <b>Public</b>
+                <small>Share it in the public games library.</small>
+              </button>
+            </div>
+          </fieldset>
           <div className="minigame-actions">
             <button className="secondary" onClick={() => setPhase(1)}>
               ← Back
             </button>
-            <button disabled={!mode} onClick={() => setPhase(3)}>
+            <button disabled={!mode || !visibility} onClick={() => setPhase(3)}>
               Generate minigame →
             </button>
           </div>
@@ -548,7 +790,11 @@ export default function Games() {
       )}
 
       {phase === 4 && game && (
-        <PlaySpace game={game} files={files} onReset={reset} />
+        <PlaySpace
+          game={game}
+          sourceCount={game.sourceCount ?? files.length}
+          onReset={openLibrary}
+        />
       )}
     </>
   );
