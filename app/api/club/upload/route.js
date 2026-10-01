@@ -33,45 +33,23 @@ export async function POST(request) {
       name: file.name,
       purpose,
     });
-    let sqliteDb = null;
-    const total = mysqlPool
-      ? await mysqlFileUsage(user.id)
-      : ((sqliteDb = (await import("@/lib/db")).db),
-        sqliteDb
-          .prepare(
-            "SELECT COALESCE(SUM(length(content)),0) n FROM rc_files WHERE owner_id=?",
-          )
-          .get(user.id).n);
+    if (!mysqlPool) throw new Error("MySQL is required.");
+    const total = await mysqlFileUsage(user.id);
     if (total + buf.length > 100 * 1024 * 1024)
       throw new Error("Upload allowance of 100 MB reached.");
     const id = randomUUID(),
       name = prepared.name,
       createdAt = new Date().toISOString();
-    if (mysqlPool) {
-      await saveMysqlFile({
-        id,
-        owner_id: user.id,
-        name,
-        purpose,
-        mime: prepared.mime,
-        content: buf,
-        extracted: prepared.extracted,
-        created_at: createdAt,
-      });
-    } else {
-      sqliteDb
-        .prepare("INSERT INTO rc_files VALUES(?,?,?,?,?,?,?,?)")
-        .run(
-          id,
-          user.id,
-          name,
-          purpose,
-          prepared.mime,
-          buf,
-          prepared.extracted,
-          createdAt,
-        );
-    }
+    await saveMysqlFile({
+      id,
+      owner_id: user.id,
+      name,
+      purpose,
+      mime: prepared.mime,
+      content: buf,
+      extracted: prepared.extracted,
+      created_at: createdAt,
+    });
     return NextResponse.json({
       id,
       name,

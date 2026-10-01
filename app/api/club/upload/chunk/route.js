@@ -19,9 +19,6 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const localUploads = globalThis.__revisionLocalUploadChunks || new Map();
-globalThis.__revisionLocalUploadChunks = localUploads;
-
 function cleanMetadata(form) {
   const uploadId = String(form.get("uploadId") || ""),
     index = Number(form.get("index")),
@@ -103,30 +100,6 @@ function responseFor(file, status) {
   };
 }
 
-async function saveLocalChunk(userId, metadata, content) {
-  const key = `${userId}:${metadata.uploadId}`;
-  const current = localUploads.get(key) || {
-    createdAt: Date.now(),
-    metadata,
-    chunks: new Map(),
-  };
-  if (Date.now() - current.createdAt > 24 * 60 * 60 * 1000) {
-    localUploads.delete(key);
-    throw new Error("This upload expired. Please restart it.");
-  }
-  current.chunks.set(metadata.index, content);
-  localUploads.set(key, current);
-  return Array.from(current.chunks, ([chunk_index, chunkContent]) => ({
-    chunk_index,
-    total_chunks: current.metadata.total,
-    name: current.metadata.name,
-    purpose: current.metadata.purpose,
-    mime: current.metadata.mime,
-    original_size: current.metadata.originalSize,
-    content: chunkContent,
-  }));
-}
-
 export async function POST(request) {
   let metadata;
   try {
@@ -142,18 +115,15 @@ export async function POST(request) {
     }).formData();
     metadata = cleanMetadata(form);
 
-    if (mysqlPool) {
-      const existing = (await mysqlFiles(user.id, [metadata.uploadId]))[0];
-      if (existing) return NextResponse.json(responseFor(existing));
-    }
+    if (!mysqlPool) throw new Error("MySQL is required.");
+    const existing = (await mysqlFiles(user.id, [metadata.uploadId]))[0];
+    if (existing) return NextResponse.json(responseFor(existing));
 
     const content = Buffer.from(await metadata.chunk.arrayBuffer());
-    const chunks = mysqlPool
-      ? await saveMysqlUploadChunk(user.id, {
-          ...metadata,
-          content,
-        })
-      : await saveLocalChunk(user.id, metadata, content);
+    const chunks = await saveMysqlUploadChunk(user.id, {
+      ...metadata,
+      content,
+    });
     const buffer = verifyChunks(chunks, metadata);
     if (!buffer)
       return NextResponse.json({
@@ -169,42 +139,20 @@ export async function POST(request) {
       purpose: metadata.purpose,
     });
     const createdAt = new Date().toISOString();
-    if (mysqlPool) {
-      const totalUsage = await mysqlFileUsage(user.id);
-      if (totalUsage + buffer.length > 100 * 1024 * 1024)
-        throw new Error("Upload allowance of 100 MB reached.");
-      await saveMysqlFile({
-        id: metadata.uploadId,
-        owner_id: user.id,
-        name: prepared.name,
-        purpose: prepared.purpose,
-        mime: prepared.mime,
-        content: prepared.content,
-        extracted: prepared.extracted,
-        created_at: createdAt,
-      });
-      await deleteMysqlUploadChunks(user.id, metadata.uploadId);
-    } else {
-      const { db } = await import("@/lib/db");
-      const totalUsage = db
-        .prepare(
-          "SELECT COALESCE(SUM(length(content)),0) n FROM rc_files WHERE owner_id=?",
-        )
-        .get(user.id).n;
-      if (totalUsage + buffer.length > 100 * 1024 * 1024)
-        throw new Error("Upload allowance of 100 MB reached.");
-      db.prepare("INSERT INTO rc_files VALUES(?,?,?,?,?,?,?,?)").run(
-        metadata.uploadId,
-        user.id,
-        prepared.name,
-        prepared.purpose,
-        prepared.mime,
-        prepared.content,
-        prepared.extracted,
-        createdAt,
-      );
-      localUploads.delete(`${user.id}:${metadata.uploadId}`);
-    }
+    const totalUsage = await mysqlFileUsage(user.id);
+    if (totalUsage + buffer.length > 100 * 1024 * 1024)
+      throw new Error("Upload allowance of 100 MB reached.");
+    await saveMysqlFile({
+      id: metadata.uploadId,
+      owner_id: user.id,
+      name: prepared.name,
+      purpose: prepared.purpose,
+      mime: prepared.mime,
+      content: prepared.content,
+      extracted: prepared.extracted,
+      created_at: createdAt,
+    });
+    await deleteMysqlUploadChunks(user.id, metadata.uploadId);
     return NextResponse.json(
       responseFor(
         {

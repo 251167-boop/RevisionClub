@@ -14,6 +14,7 @@ import {
   saveMysqlVersionDraft,
 } from "@/lib/club/mysql-drafts";
 import domain from "@/lib/club/service.cjs";
+import mysqlSync from "@/lib/club/mysql-sync.cjs";
 import rules from "@/lib/club/rules.cjs";
 import {
   generatePaper,
@@ -24,55 +25,20 @@ import {
 import { randomUUID } from "node:crypto";
 import games from "@/lib/club/games.cjs";
 export const dynamic = "force-dynamic";
-let sqliteServicePromise;
-async function sqliteService() {
-  if (!sqliteServicePromise)
-    sqliteServicePromise = import("@/lib/db").then(({ db }) =>
-      domain.service(db),
-    );
-  return sqliteServicePromise;
+let mysqlServiceInstance;
+function mysqlService() {
+  if (!mysqlPool)
+    throw new Error("MySQL is required. SQLite fallback has been removed.");
+  if (!mysqlServiceInstance)
+    mysqlServiceInstance = domain.service(mysqlSync.openMysqlSync());
+  return mysqlServiceInstance;
 }
 
-function mirrorFiles(svc, files) {
-  for (const file of files) {
-    svc.run(
-      `INSERT INTO rc_files(id,owner_id,name,purpose,mime,content,extracted,created_at)
-       VALUES(?,?,?,?,?,?,?,?)
-       ON CONFLICT(id) DO UPDATE SET
-         name=excluded.name,
-         purpose=excluded.purpose,
-         mime=excluded.mime,
-         content=excluded.content,
-         extracted=excluded.extracted`,
-      file.id,
-      file.owner_id,
-      file.name,
-      file.purpose,
-      file.mime,
-      file.content,
-      file.extracted || "",
-      file.created_at,
-    );
-  }
-}
-
-async function ownedFiles(svc, userId, ids) {
+async function ownedFiles(userId, ids) {
   const uniqueIds = [...new Set((ids || []).map(String))];
   if (!uniqueIds.length) return [];
-  if (!mysqlPool)
-    return uniqueIds.map((id) => {
-      const file = svc.get(
-        "SELECT * FROM rc_files WHERE id=? AND owner_id=?",
-        id,
-        userId,
-      );
-      if (!file) throw new Error("File access denied.");
-      return file;
-    });
-
   const files = await mysqlFiles(userId, uniqueIds);
   if (files.length !== uniqueIds.length) throw new Error("File access denied.");
-  mirrorFiles(svc, files);
   return files;
 }
 const throttle = globalThis.__clubThrottle || new Map();
@@ -102,15 +68,9 @@ export async function GET(request, props) {
     let data;
     const q = new URL(request.url).searchParams;
     if (resource === "dashboard")
-      data = mysqlPool
-        ? { ...(await mysqlDashboard(uid)), user, ai: aiAvailable() }
-        : {
-            ...(await sqliteService()).dashboard(uid),
-            user,
-            ai: aiAvailable(),
-          };
+      data = { ...(await mysqlDashboard(uid)), user, ai: aiAvailable() };
     else if (resource === "papers") {
-      const svc = await sqliteService();
+      const svc = mysqlService();
       data = key
         ? svc.paper(uid, key)
         : q.get("page")
@@ -129,20 +89,16 @@ export async function GET(request, props) {
             )
           : svc.papers(uid, q.get("community") === "true");
     } else {
-      const svc = await sqliteService();
+      const svc = mysqlService();
       if (resource === "attempts") data = svc.attempt(uid, key);
       else if (resource === "results")
         data = key ? svc.review(uid, key) : svc.results(uid);
       else if (resource === "groups")
         data = key ? svc.group(uid, key) : svc.groups(uid);
       else if (resource === "paper-draft")
-        data = mysqlPool
-          ? await mysqlPaperDraft(uid, q.get("group") || "")
-          : svc.paperDraft(uid, q.get("group") || "");
+        data = await mysqlPaperDraft(uid, q.get("group") || "");
       else if (resource === "version-draft")
-        data = mysqlPool
-          ? await mysqlVersionDraft(uid, key)
-          : svc.versionDraft(uid, key);
+        data = await mysqlVersionDraft(uid, key);
       else if (resource === "assignments") data = svc.assignments(uid);
       else if (resource === "friends") data = svc.friends(uid);
       else if (resource === "mistakes") data = svc.mistakes(uid);
@@ -210,14 +166,12 @@ export async function POST(request, props) {
     const user = await identity(request, true),
       uid = user.id,
       key = params.path[1];
-    const svc = await sqliteService();
+    const svc = mysqlService();
     const b = await readJSON(request);
     let data;
     if (resource === "version-regenerate") {
       rate(uid, "generate");
-      const context = mysqlPool
-        ? await mysqlVersionEditContext(uid, key)
-        : svc.versionEditContext(uid, key);
+      const context = await mysqlVersionEditContext(uid, key);
       data = await regenerateQuestions(
         context.settings,
         context.files,
@@ -232,19 +186,16 @@ export async function POST(request, props) {
         answerKey: data.answerKey,
         keySource: "AI-generated marking scheme",
       };
-      if (mysqlPool) await saveMysqlVersionDraft(uid, key, draft);
-      else svc.saveVersionDraft(uid, key, draft);
+      await saveMysqlVersionDraft(uid, key, draft);
     } else if (resource === "version-draft")
-      data = mysqlPool
-        ? await saveMysqlVersionDraft(uid, key, b)
-        : svc.saveVersionDraft(uid, key, b);
+      data = await saveMysqlVersionDraft(uid, key, b);
     else if (resource === "generate" || resource === "regenerate") {
       rate(uid, "generate");
       rules.validSubject(b.subject);
       if (b.groupId) svc.groupSubject(uid, b.groupId, b.subject);
       const ids = b.fileIds || [];
       if (ids.length > 8) throw new Error("Use up to 8 files.");
-      const files = await ownedFiles(svc, uid, ids);
+      const files = await ownedFiles(uid, ids);
       data =
         resource === "regenerate"
           ? await regenerateQuestions(
@@ -265,14 +216,11 @@ export async function POST(request, props) {
         answerKey: data.answerKey,
         keySource: "AI-generated marking scheme",
       };
-      if (mysqlPool) await saveMysqlPaperDraft(uid, b.groupId || "", draft);
-      else svc.savePaperDraft(uid, b.groupId || "", draft);
+      await saveMysqlPaperDraft(uid, b.groupId || "", draft);
     } else if (resource === "paper-draft")
-      data = mysqlPool
-        ? await saveMysqlPaperDraft(uid, b.groupId || "", b.draft)
-        : svc.savePaperDraft(uid, b.groupId || "", b.draft);
+      data = await saveMysqlPaperDraft(uid, b.groupId || "", b.draft);
     else if (resource === "papers") {
-      await ownedFiles(svc, uid, b.fileIds || []);
+      await ownedFiles(uid, b.fileIds || []);
       data = svc.savePaper(
         uid,
         b,
@@ -280,11 +228,9 @@ export async function POST(request, props) {
         b.answerKey,
         b.keySource || "Human-provided answer key",
       );
-      if (mysqlPool) {
-        if (!b.paperId) await saveMysqlPaperDraft(uid, b.groupId || "", null);
-        if (b.sourceVersionId)
-          await deleteMysqlVersionDraft(uid, b.sourceVersionId);
-      } else if (!b.paperId) svc.savePaperDraft(uid, b.groupId || "", null);
+      if (!b.paperId) await saveMysqlPaperDraft(uid, b.groupId || "", null);
+      if (b.sourceVersionId)
+        await deleteMysqlVersionDraft(uid, b.sourceVersionId);
     } else if (resource === "attempts")
       data = svc.startAttempt(uid, b.versionId, b.assignmentId || null);
     else if (resource === "answers")
@@ -329,7 +275,7 @@ export async function POST(request, props) {
     } else if (resource === "bossAnswer") {
       data = svc.bossAnswer(uid, b.id, b.questionId, b.answer);
     } else if (resource === "gameFinish") {
-      data = db.transaction(() => {
+      data = svc.transaction(() => {
         const g = svc.get(
           "SELECT * FROM rc_games WHERE id=? AND user_id=?",
           b.id,
@@ -400,7 +346,11 @@ export async function POST(request, props) {
     );
     return NextResponse.json(
       {
-        error: e.code?.startsWith("SQLITE_CONSTRAINT")
+        error: [
+          "ER_DUP_ENTRY",
+          "ER_NO_REFERENCED_ROW_2",
+          "ER_ROW_IS_REFERENCED_2",
+        ].includes(e.code)
           ? "This action conflicts with an existing record. Refresh and try again."
           : e.message,
         code: e.publicCode || undefined,
