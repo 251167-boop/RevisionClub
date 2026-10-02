@@ -32,6 +32,9 @@ test("sign-up, manual paper, second student marking and creator challenge resolu
   await page.getByRole("button", { name: "Geography", exact: true }).click();
   await page.getByRole("button", { name: "Write a manual paper" }).click();
   await page
+    .getByRole("button", { name: "Edit question 1", exact: true })
+    .click();
+  await page
     .getByLabel("Question 1 text", { exact: true })
     .fill("What powers evaporation in the water cycle?");
   await page.getByLabel("Answer key 1", { exact: true }).fill("Solar heating");
@@ -66,7 +69,9 @@ test("sign-up, manual paper, second student marking and creator challenge resolu
   await pupil.goto(paperURL);
   await pupil.getByLabel("Rating").selectOption("5");
   await pupil.getByRole("button", { name: "Save rating" }).click();
-  await expect(pupil.getByText("Thank you. Your rating is saved.")).toBeVisible();
+  await expect(
+    pupil.getByText("Thank you. Your rating is saved."),
+  ).toBeVisible();
   await pupil.goto(resultURL);
   await pupil.getByText("Challenge marking ↗", { exact: true }).click();
   await pupil
@@ -156,14 +161,26 @@ test("private draft recovery and answer-key undo follow editor changes", async (
     .fill("Recoverable paper");
   await page.getByRole("button", { name: "Write a manual paper" }).click();
   await page
+    .getByRole("button", { name: "Edit question 1", exact: true })
+    .click();
+  await page
     .getByLabel("Question 1 text", { exact: true })
     .fill("What is 2 + 2?");
   await page.getByLabel("Answer key 1", { exact: true }).fill("4");
   await page
     .getByLabel("Question format 1", { exact: true })
     .selectOption("mc_box");
-  await page.getByLabel("Options 1", { exact: true }).fill("3\n4\n5");
-  await page.locator(".edit-question").filter({ hasText: "Question 1" }).getByText("More options", { exact: true }).click();
+  await page.getByLabel("Option A for question 1", { exact: true }).fill("3");
+  await page.getByLabel("Option B for question 1", { exact: true }).fill("4");
+  await page.getByLabel("Option C for question 1", { exact: true }).fill("5");
+  await page
+    .getByLabel("Set option B as correct for question 1", { exact: true })
+    .check();
+  await page
+    .locator(".edit-question")
+    .filter({ hasText: "QUESTION 1" })
+    .getByText("More Settings", { exact: true })
+    .click();
   await page
     .getByLabel("Accepted alternatives 1", { exact: true })
     .fill("four\nFour units");
@@ -172,6 +189,7 @@ test("private draft recovery and answer-key undo follow editor changes", async (
     .getByLabel("Question 2 text", { exact: true })
     .fill("What is 3 + 3?");
   await page.getByLabel("Answer key 2", { exact: true }).fill("6");
+  await page.getByLabel("More actions for question 1", { exact: true }).click();
   await page
     .getByRole("button", { name: "Delete question 1", exact: true })
     .click();
@@ -179,30 +197,33 @@ test("private draft recovery and answer-key undo follow editor changes", async (
     0,
   );
   await page.getByRole("button", { name: "Undo" }).click();
-  await expect(page.getByLabel("Answer key 1", { exact: true })).toHaveValue(
-    "4",
-  );
+  await page
+    .getByRole("button", { name: "Edit question 1", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Set option B as correct for question 1", { exact: true }),
+  ).toBeChecked();
   await page.getByRole("button", { name: "Redo" }).click();
   await expect(page.getByLabel("Question 1 text", { exact: true })).toHaveCount(
     0,
   );
   await page.getByRole("button", { name: "Undo" }).click();
+  await page.getByLabel("More actions for question 2", { exact: true }).click();
   await page
     .getByRole("button", { name: "Move question 2 up", exact: true })
     .click();
   await expect(page.locator(".edit-question").first()).toContainText(
-    "Question 2",
+    "QUESTION 2",
   );
-  await page.locator(".edit-question").first().getByText("More options", { exact: true }).click();
   await page
     .getByRole("button", { name: "Regenerate question 1", exact: true })
     .click();
   await expect(page.locator("main [role=alert]")).toContainText(
     "AI is not configured",
   );
-  await expect(page.getByLabel("Answer key 1", { exact: true })).toHaveValue(
-    "4",
-  );
+  await expect(
+    page.getByLabel("Set option B as correct for question 1", { exact: true }),
+  ).toBeChecked();
   await page.getByRole("button", { name: "Save draft", exact: true }).click();
   await expect(
     page.getByText("Draft saved. You can return to it from this account."),
@@ -211,21 +232,34 @@ test("private draft recovery and answer-key undo follow editor changes", async (
   await expect(
     page.getByText("Your saved draft has been restored."),
   ).toBeVisible();
-  await expect(page.getByLabel("Options 1", { exact: true })).toHaveValue(
-    "3\n4\n5",
-  );
-  await page.locator(".edit-question").filter({ hasText: "Question 1" }).getByText("More options", { exact: true }).click();
+  await page
+    .getByRole("button", { name: "Edit question 1", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Option A for question 1", { exact: true }),
+  ).toHaveValue("3");
+  await expect(
+    page.getByLabel("Option B for question 1", { exact: true }),
+  ).toHaveValue("4");
+  await expect(
+    page.getByLabel("Option C for question 1", { exact: true }),
+  ).toHaveValue("5");
+  await page
+    .locator(".edit-question")
+    .filter({ hasText: "QUESTION 1" })
+    .getByText("More Settings", { exact: true })
+    .click();
   await expect(
     page.getByLabel("Accepted alternatives 1", { exact: true }),
   ).toHaveValue("four\nFour units");
   await expect(page.getByLabel("Paper title", { exact: true })).toHaveValue(
     "Recoverable paper",
   );
-  await expect(page.getByLabel("Answer key 1", { exact: true })).toHaveValue(
-    "4",
-  );
+  await expect(
+    page.getByLabel("Set option B as correct for question 1", { exact: true }),
+  ).toBeChecked();
   await expect(page.locator(".edit-question").first()).toContainText(
-    "Question 2",
+    "QUESTION 2",
   );
   const firstQuestion = page.locator(".edit-question").first();
   await firstQuestion.locator("summary").click();

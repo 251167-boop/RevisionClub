@@ -100,6 +100,43 @@ test("subjects and AI output validation", () => {
     r.validatePaper({ ...content, questions }).questions.map((q) => q.type),
     r.QUESTION_TYPES,
   );
+  assert.deepEqual(
+    r.validatePaper({
+      ...content,
+      questions: [
+        {
+          ...base,
+          type: "mc_box",
+          options: ["A. Alpha", "B) Beta", "(C) Charlie", "D - Delta"],
+        },
+      ],
+    }).questions[0].options,
+    ["Alpha", "Beta", "Charlie", "Delta"],
+  );
+  const labelledPaper = r.validatePaper({
+    ...content,
+    questions: [
+      {
+        ...base,
+        type: "mc_box",
+        options: ["A. Alpha", "B) Beta", "(C) Charlie", "D - Delta"],
+      },
+    ],
+  });
+  assert.equal(
+    r.validateKey(
+      [
+        {
+          questionId: "1",
+          answer: "D. Delta",
+          alternatives: [],
+          rubric: "",
+        },
+      ],
+      labelledPaper.questions,
+    )[0].answer,
+    "Delta",
+  );
   assert.throws(() =>
     r.validatePaper({
       ...content,

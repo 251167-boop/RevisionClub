@@ -1,19 +1,31 @@
 const { test, expect } = require("@playwright/test");
 
-test("dashboard, sidebar and editor use progressive disclosure", async ({ page }) => {
+test("dashboard, sidebar and editor use progressive disclosure", async ({
+  page,
+}) => {
   test.setTimeout(120000);
   const name = `Simple${Date.now()}`;
   await page.goto("/signIn?mode=signup");
   await page.getByLabel("Username", { exact: true }).fill(name);
   await page.getByLabel("Email", { exact: true }).fill(`${name}@example.test`);
-  await page.getByLabel("Password", { exact: true }).fill("LocalQA-password-2026");
+  await page
+    .getByLabel("Password", { exact: true })
+    .fill("LocalQA-password-2026");
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page).toHaveURL(/dashboard/);
 
-  await expect(page.locator(".today-card")).toContainText("TODAY, AT YOUR PACE");
-  await expect(page.getByRole("heading", { name: "Recent papers." })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Recent mistakes." })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Your study group." })).toBeVisible();
+  await expect(page.locator(".today-card")).toContainText(
+    "TODAY, AT YOUR PACE",
+  );
+  await expect(
+    page.getByRole("heading", { name: "Recent papers." }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Recent mistakes." }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Your study group." }),
+  ).toBeVisible();
   await expect(page.locator(".today-item")).toHaveCount(3);
   await expect(page.locator(".dashboard-summary")).toHaveCount(3);
 
@@ -26,15 +38,39 @@ test("dashboard, sidebar and editor use progressive disclosure", async ({ page }
   await expect(sidebar.getByRole("link", { name: "Timetable" })).toBeVisible();
 
   await page.goto("/papers/create");
-  await page.getByLabel("Paper title", { exact: true }).fill("Simple editor QA");
+  await page
+    .getByLabel("Paper title", { exact: true })
+    .fill("Simple editor QA");
   await page.getByRole("button", { name: "Write a manual paper" }).click();
   const question = page.locator(".edit-question").first();
-  await expect(question.getByText("Question", { exact: true })).toBeVisible();
-  await expect(question.getByLabel("Question format 1", { exact: true })).toBeVisible();
-  await expect(question.getByLabel("Answer key 1", { exact: true })).toBeVisible();
-  await expect(question.locator("details")).not.toHaveAttribute("open", "");
-  await question.locator("summary").click();
+  await expect(
+    question.getByText("Untitled question", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    question.getByLabel("Question format 1", { exact: true }),
+  ).toHaveCount(0);
+  await question
+    .getByRole("button", { name: "Edit question 1", exact: true })
+    .click();
+  await expect(
+    question.getByLabel("Question format 1", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    question.getByLabel("Answer key 1", { exact: true }),
+  ).toBeVisible();
+  await expect(question.locator(".question-advanced")).not.toHaveAttribute(
+    "open",
+    "",
+  );
+  await question.getByText("More Settings", { exact: true }).click();
   await expect(question.getByLabel("Topic", { exact: true })).toBeVisible();
-  await expect(question.getByLabel("Page", { exact: true })).toBeVisible();
-  await expect(question.getByLabel("Accepted alternatives 1", { exact: true })).toBeVisible();
+  await expect(
+    question.getByText("Insert page break", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    question.getByLabel("Answer space for question 1", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    question.getByLabel("Accepted alternatives 1", { exact: true }),
+  ).toBeVisible();
 });

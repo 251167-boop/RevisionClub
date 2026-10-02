@@ -18,11 +18,18 @@ test("the eight base question formats render and accept their intended responses
   await expect(page).toHaveURL(/dashboard/);
 
   await page.goto("/papers/create");
-  await page.getByLabel("Paper title", { exact: true }).fill("Format editor QA");
+  await page
+    .getByLabel("Paper title", { exact: true })
+    .fill("Format editor QA");
   await page.getByRole("button", { name: "Write a manual paper" }).click();
+  await page
+    .getByRole("button", { name: "Edit question 1", exact: true })
+    .click();
   const format = page.getByLabel("Question format 1", { exact: true });
   await format.selectOption("mc_box");
-  await expect(page.getByLabel("Options 1", { exact: true })).toBeVisible();
+  await expect(
+    page.getByLabel("Option A for question 1", { exact: true }),
+  ).toBeVisible();
   await format.selectOption("comprehension");
   await expect(page.getByLabel("Passage 1", { exact: true })).toBeVisible();
   await format.selectOption("matching");
@@ -175,7 +182,9 @@ test("the eight base question formats render and accept their intended responses
   await page.locator(".mc_single_box .mc-option").nth(1).click();
   await expect(page.locator(".single-answer-box")).toContainText("B");
   await page.locator(".mc_circle .mc-option").nth(1).click();
-  await expect(page.locator(".mc_circle .choice-circle.selected")).toHaveCount(1);
+  await expect(page.locator(".mc_circle .choice-circle.selected")).toHaveCount(
+    1,
+  );
   await page.getByLabel("Answer to question 4").fill("2 + 2 = 4");
   await page.getByLabel("Answer to question 5").fill("6");
   await page.getByLabel("Answer to question 6").fill("apple");

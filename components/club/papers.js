@@ -15,7 +15,8 @@ import {
   ActionForm,
   uploadClubFile,
 } from "./ui";
-const { SUBJECTS, QUESTION_TYPES: QUESTION_TYPE_IDS } = rules;
+const { SUBJECTS, QUESTION_TYPES: QUESTION_TYPE_IDS, stripChoiceLabel } = rules;
+const MC_TYPES = new Set(["mc_box", "mc_single_box", "mc_circle"]);
 const QUESTION_TYPES = [
   ["mc_box", "MC · A–D with answer boxes"],
   ["mc_single_box", "MC · one answer box"],
@@ -30,6 +31,19 @@ function questionType(question) {
   if (QUESTION_TYPE_IDS.includes(question.type)) return question.type;
   return question.options?.length ? "mc_box" : "short_answer";
 }
+function cleanChoice(value) {
+  return stripChoiceLabel
+    ? stripChoiceLabel(value)
+    : String(value || "").trim();
+}
+function answerSpaceValue(space) {
+  const value = Number(space || 4);
+  if (value <= 2) return "small";
+  if (value >= 8) return "large";
+  if (value >= 5) return "medium";
+  return "auto";
+}
+const ANSWER_SPACES = { auto: 4, small: 2, medium: 5, large: 9 };
 const ASPECTS = [
   "Font / typography",
   "Font size",
@@ -67,24 +81,27 @@ export function Library({ community = false }) {
       </>
     );
   const rows = community ? data.items : data,
-    filtered = (community ? rows : rows
-    .filter(
-      (p) =>
-        (subject === "All subjects" || p.subject === subject) &&
-        (difficulty === "All difficulties" || p.difficulty === difficulty) &&
-        (grade === "All years" || p.grade === grade) &&
-        [p.title, p.description, p.username, ...(p.topics || [])]
-          .join(" ")
-          .toLowerCase()
-          .includes(query.toLowerCase()),
-    )
-    .sort((a, b) =>
-      sort === "Rating"
-        ? (b.rating || 0) - (a.rating || 0)
-        : sort === "Most attempted"
-          ? b.attempts - a.attempts
-        : 0,
-    ));
+    filtered = community
+      ? rows
+      : rows
+          .filter(
+            (p) =>
+              (subject === "All subjects" || p.subject === subject) &&
+              (difficulty === "All difficulties" ||
+                p.difficulty === difficulty) &&
+              (grade === "All years" || p.grade === grade) &&
+              [p.title, p.description, p.username, ...(p.topics || [])]
+                .join(" ")
+                .toLowerCase()
+                .includes(query.toLowerCase()),
+          )
+          .sort((a, b) =>
+            sort === "Rating"
+              ? (b.rating || 0) - (a.rating || 0)
+              : sort === "Most attempted"
+                ? b.attempts - a.attempts
+                : 0,
+          );
   return (
     <>
       <Heading
@@ -107,12 +124,18 @@ export function Library({ community = false }) {
           aria-label="Search papers"
           placeholder="Search title, topic or creator…"
           value={query}
-          onChange={(e) => { setQuery(e.target.value); setPage(1); }}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setPage(1);
+          }}
         />
         <select
           aria-label="Filter subject"
           value={subject}
-          onChange={(e) => { setSubject(e.target.value); setPage(1); }}
+          onChange={(e) => {
+            setSubject(e.target.value);
+            setPage(1);
+          }}
         >
           <option>All subjects</option>
           {SUBJECTS.map((s) => (
@@ -122,7 +145,10 @@ export function Library({ community = false }) {
         <select
           aria-label="Filter difficulty"
           value={difficulty}
-          onChange={(e) => { setDifficulty(e.target.value); setPage(1); }}
+          onChange={(e) => {
+            setDifficulty(e.target.value);
+            setPage(1);
+          }}
         >
           {["All difficulties", "Foundation", "Standard", "Challenging"].map(
             (x) => (
@@ -133,7 +159,10 @@ export function Library({ community = false }) {
         <select
           aria-label="Filter year"
           value={grade}
-          onChange={(e) => { setGrade(e.target.value); setPage(1); }}
+          onChange={(e) => {
+            setGrade(e.target.value);
+            setPage(1);
+          }}
         >
           <option>All years</option>
           {[...new Set(rows.map((p) => p.grade).filter(Boolean))]
@@ -145,7 +174,10 @@ export function Library({ community = false }) {
         <select
           aria-label="Sort papers"
           value={sort}
-          onChange={(e) => { setSort(e.target.value); setPage(1); }}
+          onChange={(e) => {
+            setSort(e.target.value);
+            setPage(1);
+          }}
         >
           <option>Newest</option>
           <option>Rating</option>
@@ -732,6 +764,381 @@ export function CreatePaper() {
     </>
   );
 }
+function QuestionEditorCard({
+  question: q,
+  index,
+  pageQuestionCount,
+  totalQuestions,
+  answer,
+  editing,
+  canRegenerate,
+  hasPageBreak,
+  onEdit,
+  onRegenerate,
+  onQuestion,
+  onChoices,
+  onType,
+  onKey,
+  onMove,
+  onDuplicate,
+  onDelete,
+  onPageBreak,
+}) {
+  const type = questionType(q),
+    isMultipleChoice = MC_TYPES.has(type),
+    choices = q.options || [],
+    selectedChoice = choices.findIndex((option, choiceIndex) => {
+      const letter = String.fromCharCode(65 + choiceIndex);
+      return (
+        answer.answer === option ||
+        answer.answer === cleanChoice(option) ||
+        answer.answer?.toUpperCase() === letter
+      );
+    });
+
+  function setChoice(choiceIndex, value) {
+    const next = [...choices];
+    while (next.length <= choiceIndex) next.push("");
+    const previous = next[choiceIndex];
+    next[choiceIndex] = cleanChoice(value);
+    const answerChanges =
+      answer.answer === previous ||
+      answer.answer === cleanChoice(previous) ||
+      answer.answer?.toUpperCase() === String.fromCharCode(65 + choiceIndex)
+        ? { answer: cleanChoice(value) }
+        : null;
+    onChoices(next, answerChanges);
+  }
+
+  function removeChoice(choiceIndex) {
+    const removed = choices[choiceIndex],
+      next = choices.filter((_, optionIndex) => optionIndex !== choiceIndex);
+    const answerChanges =
+      answer.answer === removed ||
+      answer.answer === cleanChoice(removed) ||
+      answer.answer?.toUpperCase() === String.fromCharCode(65 + choiceIndex)
+        ? { answer: "" }
+        : null;
+    onChoices(next, answerChanges);
+  }
+
+  return (
+    <section className={`edit-question ${editing ? "is-editing" : ""}`}>
+      <div className="question-card-toolbar">
+        <span className="question-number">QUESTION {q.id}</span>
+        <div className="question-card-actions">
+          <button
+            type="button"
+            className="question-action"
+            aria-label={`${editing ? "Finish editing" : "Edit"} question ${q.id}`}
+            onClick={onEdit}
+          >
+            {editing ? "Done" : "Edit"}
+          </button>
+          {canRegenerate && (
+            <button
+              type="button"
+              className="question-action"
+              aria-label={`Regenerate question ${q.id}`}
+              onClick={onRegenerate}
+            >
+              Regenerate
+            </button>
+          )}
+          <details className="question-menu">
+            <summary aria-label={`More actions for question ${q.id}`}>
+              •••
+            </summary>
+            <div>
+              <button
+                type="button"
+                aria-label={`Duplicate question ${q.id}`}
+                onClick={onDuplicate}
+              >
+                Duplicate
+              </button>
+              <button
+                type="button"
+                aria-label={`Move question ${q.id} up`}
+                disabled={index === 0}
+                onClick={() => onMove(-1)}
+              >
+                Move up
+              </button>
+              <button
+                type="button"
+                aria-label={`Move question ${q.id} down`}
+                disabled={index === pageQuestionCount - 1}
+                onClick={() => onMove(1)}
+              >
+                Move down
+              </button>
+              <button
+                type="button"
+                className="danger-text"
+                aria-label={`Delete question ${q.id}`}
+                disabled={totalQuestions === 1}
+                onClick={onDelete}
+              >
+                Delete
+              </button>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      {!editing ? (
+        <div className="question-paper-preview">
+          <div className="question-heading">
+            <strong>
+              {q.id}. {q.text || "Untitled question"}
+            </strong>
+            {type === "mc_single_box" && (
+              <span className="single-answer-box" aria-hidden="true" />
+            )}
+            <span>[{q.marks} marks]</span>
+          </div>
+          {type === "comprehension" && q.passage && (
+            <div className="comprehension-box">{q.passage}</div>
+          )}
+          <QuestionResponse question={q} />
+        </div>
+      ) : (
+        <div className="question-edit-panel">
+          <label>
+            Question
+            <textarea
+              aria-label={`Question ${q.id} text`}
+              rows={3}
+              value={q.text}
+              onChange={(event) => onQuestion("text", event.target.value)}
+            />
+          </label>
+          <div className="question-edit-basics">
+            <label>
+              Question format
+              <select
+                aria-label={`Question format ${q.id}`}
+                value={type}
+                onChange={(event) => onType(event.target.value)}
+              >
+                {QUESTION_TYPES.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="marks-control">
+              Marks
+              <input
+                aria-label={`Marks for question ${q.id}`}
+                type="number"
+                min={1}
+                max={100}
+                value={q.marks}
+                onChange={(event) => onQuestion("marks", +event.target.value)}
+              />
+            </label>
+          </div>
+
+          {type === "comprehension" && (
+            <label>
+              Comprehension passage
+              <textarea
+                aria-label={`Passage ${q.id}`}
+                rows={8}
+                value={q.passage || ""}
+                onChange={(event) => onQuestion("passage", event.target.value)}
+                placeholder="Paste or write the Chinese or English passage here…"
+              />
+            </label>
+          )}
+
+          {isMultipleChoice && (
+            <fieldset className="choice-editor">
+              <legend>
+                Answer choices <span>Choose the correct answer</span>
+              </legend>
+              {(choices.length ? choices : ["", "", "", ""]).map(
+                (option, choiceIndex) => {
+                  const letter = String.fromCharCode(65 + choiceIndex),
+                    checked = selectedChoice === choiceIndex;
+                  return (
+                    <div className="choice-editor-row" key={choiceIndex}>
+                      <label className="correct-choice-control">
+                        <input
+                          type="radio"
+                          name={`correct-${q.id}`}
+                          aria-label={`Set option ${letter} as correct for question ${q.id}`}
+                          checked={checked}
+                          disabled={!cleanChoice(option)}
+                          onChange={() =>
+                            onKey({ answer: cleanChoice(option) })
+                          }
+                        />
+                        <span>{letter}</span>
+                      </label>
+                      <input
+                        aria-label={`Option ${letter} for question ${q.id}`}
+                        value={cleanChoice(option)}
+                        placeholder={`Option ${letter}`}
+                        onChange={(event) =>
+                          setChoice(choiceIndex, event.target.value)
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="icon-button remove-choice"
+                        aria-label={`Remove option ${letter} from question ${q.id}`}
+                        disabled={choices.length <= 2}
+                        onClick={() => removeChoice(choiceIndex)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                },
+              )}
+              <button
+                type="button"
+                className="text-button add-choice"
+                disabled={choices.length >= 8}
+                onClick={() => onQuestion("options", [...choices, ""])}
+              >
+                ＋ Add option
+              </button>
+            </fieldset>
+          )}
+
+          {type === "ordering" && (
+            <label>
+              Items to order (one per line)
+              <textarea
+                aria-label={`Options ${q.id}`}
+                value={(q.options || []).join("\n")}
+                onChange={(event) =>
+                  onQuestion(
+                    "options",
+                    event.target.value.split("\n").slice(0, 8),
+                  )
+                }
+              />
+            </label>
+          )}
+          {type === "matching" && (
+            <div className="matching-editor-fields">
+              <label>
+                Left-side prompts (one per line)
+                <textarea
+                  aria-label={`Matching prompts ${q.id}`}
+                  value={(q.items || []).join("\n")}
+                  onChange={(event) =>
+                    onQuestion(
+                      "items",
+                      event.target.value.split("\n").slice(0, 8),
+                    )
+                  }
+                />
+              </label>
+              <label>
+                Right-side choices (one per line)
+                <textarea
+                  aria-label={`Options ${q.id}`}
+                  value={(q.options || []).join("\n")}
+                  onChange={(event) =>
+                    onQuestion(
+                      "options",
+                      event.target.value.split("\n").slice(0, 8),
+                    )
+                  }
+                />
+              </label>
+            </div>
+          )}
+
+          {!isMultipleChoice && (
+            <label>
+              Correct answer{" "}
+              <span className="muted small">PRIVATE · CREATOR ONLY</span>
+              <textarea
+                aria-label={`Answer key ${q.id}`}
+                rows={type === "short_answer" ? 2 : 4}
+                value={answer.answer || ""}
+                onChange={(event) => onKey({ answer: event.target.value })}
+              />
+            </label>
+          )}
+
+          <details className="question-advanced">
+            <summary>More Settings</summary>
+            <div className="question-settings-grid">
+              <label>
+                Topic
+                <input
+                  value={q.topic}
+                  onChange={(event) => onQuestion("topic", event.target.value)}
+                />
+              </label>
+              {["short_answer", "answer_space", "comprehension"].includes(
+                type,
+              ) && (
+                <label>
+                  Answer space
+                  <select
+                    aria-label={`Answer space for question ${q.id}`}
+                    value={answerSpaceValue(q.space)}
+                    onChange={(event) =>
+                      onQuestion("space", ANSWER_SPACES[event.target.value])
+                    }
+                  >
+                    <option value="auto">Auto</option>
+                    <option value="small">Small</option>
+                    <option value="medium">Medium</option>
+                    <option value="large">Large</option>
+                  </select>
+                </label>
+              )}
+              <label className="page-break-setting">
+                <input
+                  type="checkbox"
+                  checked={hasPageBreak}
+                  onChange={(event) => onPageBreak(event.target.checked)}
+                />
+                <span>
+                  Insert page break
+                  <small>Start this question on a new page.</small>
+                </span>
+              </label>
+            </div>
+            <label>
+              Accepted alternative answers (one per line, up to 20)
+              <span className="muted small"> PRIVATE · CREATOR ONLY</span>
+              <textarea
+                aria-label={`Accepted alternatives ${q.id}`}
+                value={(answer.alternatives || []).join("\n")}
+                onChange={(event) =>
+                  onKey({
+                    alternatives: event.target.value.split("\n").slice(0, 20),
+                  })
+                }
+              />
+            </label>
+            <label>
+              Rubric / method marks
+              <textarea
+                aria-label={`Rubric ${q.id}`}
+                value={answer.rubric || ""}
+                onChange={(event) => onKey({ rubric: event.target.value })}
+              />
+            </label>
+          </details>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function PaperEditor({
   content,
   setContent,
@@ -743,6 +1150,7 @@ export function PaperEditor({
     [zoom, setZoom] = useState(100),
     [history, setHistory] = useState([]),
     [future, setFuture] = useState([]),
+    [editingQuestion, setEditingQuestion] = useState(null),
     [regenerating, setRegenerating] = useState(false),
     [regenerationError, setRegenerationError] = useState("");
   const pages = [...new Set(content.questions.map((q) => q.page))].sort(
@@ -757,6 +1165,18 @@ export function PaperEditor({
   }
   function updateKey(next) {
     update(content, next);
+  }
+  function keyEntry(qid, changes) {
+    const current = answerKey.find((entry) => entry.questionId === qid) || {
+      questionId: qid,
+      answer: "",
+      rubric: "",
+      alternatives: [],
+    };
+    updateKey([
+      ...answerKey.filter((entry) => entry.questionId !== qid),
+      { ...current, ...changes, questionId: qid },
+    ]);
   }
   function moveQuestion(q, direction) {
     const questions = [...content.questions],
@@ -801,6 +1221,86 @@ export function PaperEditor({
         x.id === q.id ? { ...x, [field]: value } : x,
       ),
     });
+  }
+  function updateChoices(q, options, answerChanges) {
+    const nextContent = {
+      ...content,
+      questions: content.questions.map((item) =>
+        item.id === q.id ? { ...item, options } : item,
+      ),
+    };
+    if (!answerChanges) return update(nextContent);
+    const current = answerKey.find((entry) => entry.questionId === q.id) || {
+      questionId: q.id,
+      answer: "",
+      rubric: "",
+      alternatives: [],
+    };
+    update(nextContent, [
+      ...answerKey.filter((entry) => entry.questionId !== q.id),
+      { ...current, ...answerChanges, questionId: q.id },
+    ]);
+  }
+  function changeQuestionType(q, type) {
+    const currentType = questionType(q),
+      next = { ...q, type };
+    if (MC_TYPES.has(type) && !MC_TYPES.has(currentType))
+      next.options = q.options?.length >= 2 ? q.options : ["", "", "", ""];
+    if (type === "matching") {
+      next.items = q.items?.length >= 2 ? q.items : ["", ""];
+      next.options = q.options?.length >= 2 ? q.options : ["", ""];
+    }
+    if (type === "ordering" && q.options?.length < 2) next.options = ["", ""];
+    update({
+      ...content,
+      questions: content.questions.map((item) =>
+        item.id === q.id ? next : item,
+      ),
+    });
+  }
+  function duplicateQuestion(q) {
+    const qid = String(
+        Math.max(...content.questions.map((item) => Number(item.id) || 0)) + 1,
+      ),
+      from = content.questions.findIndex((item) => item.id === q.id),
+      questions = [...content.questions],
+      sourceKey = answerKey.find((entry) => entry.questionId === q.id);
+    questions.splice(from + 1, 0, { ...q, id: qid });
+    update(
+      { ...content, questions },
+      sourceKey ? [...answerKey, { ...sourceKey, questionId: qid }] : answerKey,
+    );
+    setEditingQuestion(qid);
+  }
+  function togglePageBreak(q, enabled) {
+    const from = content.questions.findIndex((item) => item.id === q.id),
+      previousPage = content.questions[from - 1]?.page,
+      isFirstOnPage = from === 0 || previousPage !== q.page;
+    if (enabled && !isFirstOnPage) {
+      update({
+        ...content,
+        questions: content.questions.map((item, index) => ({
+          ...item,
+          page: index >= from ? item.page + 1 : item.page,
+        })),
+      });
+      setPage(q.page + 1);
+    } else if (!enabled && isFirstOnPage && from > 0) {
+      const removedPage = q.page;
+      update({
+        ...content,
+        questions: content.questions.map((item, index) => ({
+          ...item,
+          page:
+            index >= from
+              ? item.page === removedPage
+                ? previousPage
+                : item.page - 1
+              : item.page,
+        })),
+      });
+      setPage(previousPage);
+    }
   }
   async function regenerate(ids) {
     setRegenerating(true);
@@ -926,223 +1426,63 @@ export function PaperEditor({
               </label>
               {content.questions
                 .filter((q) => q.page === selectedPage)
-                .map((q, i) => (
-                  <section className="edit-question" key={q.id}>
-                    <div className="section-heading">
-                      <b>Question {q.id}</b>
-                      {onRegenerate && (
-                        <button
-                          className="secondary small"
-                          aria-label={"Regenerate question " + q.id}
-                          onClick={() => regenerate([q.id])}
-                        >
-                          Regenerate
-                        </button>
-                      )}
-                      <div className="actions">
-                        <button
-                          className="icon-button"
-                          aria-label={"Move question " + q.id + " up"}
-                          disabled={i === 0}
-                          onClick={() => moveQuestion(q, -1)}
-                        >
-                          ↑
-                        </button>
-                        <button
-                          className="icon-button"
-                          aria-label={"Move question " + q.id + " down"}
-                          disabled={
-                            i ===
-                            content.questions.filter(
-                              (x) => x.page === selectedPage,
-                            ).length -
-                              1
-                          }
-                          onClick={() => moveQuestion(q, 1)}
-                        >
-                          ↓
-                        </button>
-                      </div>
-                      <button
-                        className="icon-button"
-                        aria-label={"Delete question " + q.id}
-                        disabled={content.questions.length === 1}
-                        onClick={() => {
-                          update(
-                            {
-                              ...content,
-                              questions: content.questions.filter(
-                                (x) => x.id !== q.id,
-                              ),
-                            },
-                            answerKey.filter((x) => x.questionId !== q.id),
-                          );
-                        }}
-                      >
-                        ×
-                      </button>
-                    </div>
-                    <label>
-                      Question
-                      <textarea
-                        aria-label={"Question " + q.id + " text"}
-                        rows={3}
-                        value={q.text}
-                        onChange={(e) => question(q, "text", e.target.value)}
-                      />
-                    </label>
-                    <div className="form-grid">
-                      <label>
-                        Question format
-                        <select
-                          aria-label={"Question format " + q.id}
-                          value={questionType(q)}
-                          onChange={(e) => question(q, "type", e.target.value)}
-                        >
-                          {QUESTION_TYPES.map(([value, label]) => (
-                            <option key={value} value={value}>
-                              {label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        Marks
-                        <input
-                          type="number"
-                          min={1}
-                          max={100}
-                          value={q.marks}
-                          onChange={(e) =>
-                            question(q, "marks", +e.target.value)
-                          }
-                        />
-                      </label>
-                    </div>
-                    {questionType(q) === "comprehension" && (
-                      <label>
-                        Passage shown inside the comprehension box
-                        <textarea
-                          aria-label={"Passage " + q.id}
-                          rows={8}
-                          value={q.passage || ""}
-                          onChange={(e) =>
-                            question(q, "passage", e.target.value)
-                          }
-                          placeholder="Paste or write the Chinese or English passage here…"
-                        />
-                      </label>
-                    )}
-                    {["mc_box", "mc_single_box", "mc_circle", "ordering", "matching"].includes(
-                      questionType(q),
-                    ) && (
-                      <label>
-                        {questionType(q) === "ordering"
-                          ? "Items to order"
-                          : questionType(q) === "matching"
-                            ? "Right-side matching choices"
-                            : "Answer choices"}{" "}
-                        (one per line)
-                        <textarea
-                          aria-label={"Options " + q.id}
-                          value={(q.options || []).join("\n")}
-                          onChange={(e) =>
-                            question(
-                              q,
-                              "options",
-                              e.target.value.split("\n").slice(0, 8),
-                            )
-                          }
-                          placeholder={
-                            ["mc_box", "mc_single_box", "mc_circle"].includes(questionType(q))
-                              ? "Use four lines for A, B, C and D"
-                              : "Add at least two items"
-                          }
-                        />
-                      </label>
-                    )}
-                    {questionType(q) === "matching" && (
-                      <label>
-                        Left-side matching prompts (one per line)
-                        <textarea
-                          aria-label={"Matching prompts " + q.id}
-                          value={(q.items || []).join("\n")}
-                          onChange={(e) =>
-                            question(
-                              q,
-                              "items",
-                              e.target.value.split("\n").slice(0, 8),
-                            )
-                          }
-                          placeholder="Use the same number of left and right items"
-                        />
-                      </label>
-                    )}
-                    <label>
-                      Correct answer{" "}
-                      <span className="muted small">
-                        PRIVATE · CREATOR ONLY
-                      </span>
-                      <textarea
-                        aria-label={"Answer key " + q.id}
-                        value={
-                          answerKey.find((x) => x.questionId === q.id)
-                            ?.answer || ""
-                        }
-                        onChange={(e) =>
-                          updateKey([
-                            ...answerKey.filter((x) => x.questionId !== q.id),
-                            {
-                              ...answerKey.find((x) => x.questionId === q.id),
-                              questionId: q.id,
-                              answer: e.target.value,
-                            },
-                          ])
-                        }
-                      />
-                    </label>
-                    <details className="question-advanced">
-                      <summary>More options</summary>
-                      <div className="form-grid">
-                        <label>
-                          Topic
-                          <input value={q.topic} onChange={(e) => question(q, "topic", e.target.value)} />
-                        </label>
-                        <label>
-                          Page
-                          <input type="number" min={1} max={30} value={q.page} onChange={(e) => question(q, "page", +e.target.value)} />
-                        </label>
-                        <label>
-                          Answer lines
-                          <input type="number" min={1} max={16} value={q.space} onChange={(e) => question(q, "space", +e.target.value)} />
-                        </label>
-                      </div>
-                      <label>
-                        Accepted alternatives (one per line, up to 20)
-                        <span className="muted small"> PRIVATE · CREATOR ONLY</span>
-                        <textarea
-                          aria-label={"Accepted alternatives " + q.id}
-                          value={(answerKey.find((x) => x.questionId === q.id)?.alternatives || []).join("\n")}
-                          onChange={(e) => updateKey([
-                            ...answerKey.filter((x) => x.questionId !== q.id),
-                            { ...answerKey.find((x) => x.questionId === q.id), questionId: q.id, alternatives: e.target.value.split("\n").slice(0, 20) },
-                          ])}
-                        />
-                      </label>
-                      <label>
-                        Rubric / method marks
-                        <textarea
-                          aria-label={"Rubric " + q.id}
-                          value={answerKey.find((x) => x.questionId === q.id)?.rubric || ""}
-                          onChange={(e) => updateKey([
-                            ...answerKey.filter((x) => x.questionId !== q.id),
-                            { ...answerKey.find((x) => x.questionId === q.id), questionId: q.id, rubric: e.target.value },
-                          ])}
-                        />
-                      </label>
-                    </details>
-                  </section>
-                ))}
+                .map((q, index, pageQuestions) => {
+                  const answer = answerKey.find(
+                      (entry) => entry.questionId === q.id,
+                    ) || {
+                      questionId: q.id,
+                      answer: "",
+                      rubric: "",
+                      alternatives: [],
+                    },
+                    globalIndex = content.questions.findIndex(
+                      (item) => item.id === q.id,
+                    ),
+                    previous = content.questions[globalIndex - 1],
+                    hasPageBreak = globalIndex > 0 && previous?.page !== q.page;
+                  return (
+                    <QuestionEditorCard
+                      key={q.id}
+                      question={q}
+                      index={index}
+                      pageQuestionCount={pageQuestions.length}
+                      totalQuestions={content.questions.length}
+                      answer={answer}
+                      editing={editingQuestion === q.id}
+                      canRegenerate={Boolean(onRegenerate)}
+                      hasPageBreak={hasPageBreak}
+                      onEdit={() =>
+                        setEditingQuestion((current) =>
+                          current === q.id ? null : q.id,
+                        )
+                      }
+                      onRegenerate={() => regenerate([q.id])}
+                      onQuestion={(field, value) => question(q, field, value)}
+                      onChoices={(options, answerChanges) =>
+                        updateChoices(q, options, answerChanges)
+                      }
+                      onType={(type) => changeQuestionType(q, type)}
+                      onKey={(changes) => keyEntry(q.id, changes)}
+                      onMove={(direction) => moveQuestion(q, direction)}
+                      onDuplicate={() => duplicateQuestion(q)}
+                      onDelete={() => {
+                        update(
+                          {
+                            ...content,
+                            questions: content.questions.filter(
+                              (item) => item.id !== q.id,
+                            ),
+                          },
+                          answerKey.filter(
+                            (entry) => entry.questionId !== q.id,
+                          ),
+                        );
+                        setEditingQuestion(null);
+                      }}
+                      onPageBreak={(enabled) => togglePageBreak(q, enabled)}
+                    />
+                  );
+                })}
               <button
                 className="secondary"
                 onClick={() => {
@@ -1151,24 +1491,36 @@ export function PaperEditor({
                       ...content.questions.map((x) => Number(x.id) || 0),
                     ) + 1,
                   );
-                  update({
-                    ...content,
-                    questions: [
-                      ...content.questions,
+                  update(
+                    {
+                      ...content,
+                      questions: [
+                        ...content.questions,
+                        {
+                          id: qid,
+                          type: "short_answer",
+                          text: "",
+                          passage: "",
+                          marks: 2,
+                          page: selectedPage,
+                          space: 4,
+                          topic: "General",
+                          options: [],
+                          items: [],
+                        },
+                      ],
+                    },
+                    [
+                      ...answerKey,
                       {
-                        id: qid,
-                        type: "short_answer",
-                        text: "",
-                        passage: "",
-                        marks: 2,
-                        page: selectedPage,
-                        space: 4,
-                        topic: "General",
-                        options: [],
-                        items: [],
+                        questionId: qid,
+                        answer: "",
+                        rubric: "",
+                        alternatives: [],
                       },
                     ],
-                  });
+                  );
+                  setEditingQuestion(qid);
                 }}
               >
                 ＋ Add question
@@ -1203,14 +1555,18 @@ function readableAnswer(value) {
 
 function QuestionResponse({ question, value = "", onChange }) {
   const type = questionType(question),
-    options = question.options || [],
+    rawOptions = question.options || [],
+    options = MC_TYPES.has(type) ? rawOptions.map(cleanChoice) : rawOptions,
     editable = Boolean(onChange);
   if (type === "mc_box" || type === "mc_single_box" || type === "mc_circle")
     return (
       <div className={`mc-options ${type}`}>
         {options.map((option, index) => {
           const letter = String.fromCharCode(65 + index),
-            selected = value === option || value === letter;
+            selected =
+              value === option ||
+              value === rawOptions[index] ||
+              value === letter;
           const content = (
             <>
               {type === "mc_circle" && (
@@ -1218,10 +1574,16 @@ function QuestionResponse({ question, value = "", onChange }) {
                   className={`choice-circle ${selected ? "selected" : ""}`}
                 />
               )}
-              {type !== "mc_single_box" && <span className="choice-copy">
-                <b>{letter}.</b> {option}
-              </span>}
-              {type === "mc_single_box" && <span className="choice-copy"><b>{letter}.</b> {option}</span>}
+              {type !== "mc_single_box" && (
+                <span className="choice-copy">
+                  <b>{letter}.</b> {option}
+                </span>
+              )}
+              {type === "mc_single_box" && (
+                <span className="choice-copy">
+                  <b>{letter}.</b> {option}
+                </span>
+              )}
               {type === "mc_box" && (
                 <span className={`choice-box ${selected ? "selected" : ""}`}>
                   {selected ? letter : ""}
@@ -1235,7 +1597,7 @@ function QuestionResponse({ question, value = "", onChange }) {
               className="mc-option"
               aria-pressed={selected}
               key={index}
-              onClick={() => onChange(option)}
+              onClick={() => onChange(rawOptions[index])}
             >
               {content}
             </button>
@@ -1410,7 +1772,10 @@ export function ExamPaper({
             .map((q) => {
               const item = items?.find((i) => i.question_id === q.id);
               const answerValue = item?.answer || answers?.[q.id] || "";
-              const answerIndex = (q.options || []).indexOf(answerValue);
+              const answerIndex = (q.options || []).findIndex(
+                (option) =>
+                  option === answerValue || cleanChoice(option) === answerValue,
+              );
               const answerLetter = /^[A-Z]$/.test(answerValue)
                 ? answerValue
                 : answerIndex >= 0
@@ -1429,7 +1794,12 @@ export function ExamPaper({
                       {q.id}. {q.text}
                     </strong>
                     {questionType(q) === "mc_single_box" && (
-                      <span className="single-answer-box" aria-label={`Answer box for question ${q.id}`}>{answerLetter}</span>
+                      <span
+                        className="single-answer-box"
+                        aria-label={`Answer box for question ${q.id}`}
+                      >
+                        {answerLetter}
+                      </span>
                     )}
                     <span>[{q.marks} marks]</span>
                   </div>
