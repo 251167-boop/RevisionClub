@@ -1,37 +1,13 @@
 "use client";
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
+import { readApiResponse } from "@/lib/club/api-response.mjs";
+
+export { readApiResponse };
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const DIRECT_UPLOAD_BYTES = 4 * 1024 * 1024;
 const UPLOAD_CHUNK_BYTES = 3 * 1024 * 1024;
-
-export async function readApiResponse(response, fallback) {
-  const raw = await response.text();
-  let data = null;
-  try {
-    data = raw ? JSON.parse(raw) : {};
-  } catch {}
-  if (!response.ok) {
-    const platformTooLarge =
-      response.status === 413 ||
-      /request entity too large|function_payload_too_large|payload too large/i.test(
-        raw,
-      );
-    const error = new Error(
-      platformTooLarge
-        ? "This upload is too large for a single request. Revision Club will split files over 4 MB automatically; please retry."
-        : data?.error || fallback || "Something went wrong. Please retry.",
-    );
-    error.code = data?.code;
-    error.retryable = Boolean(data?.retryable);
-    error.reference = data?.reference;
-    throw error;
-  }
-  if (!data || typeof data !== "object")
-    throw new Error(fallback || "The server returned an invalid response.");
-  return data;
-}
 
 export async function uploadClubFile(file, purpose) {
   if (!file || !file.size) throw new Error("Choose a non-empty file.");
