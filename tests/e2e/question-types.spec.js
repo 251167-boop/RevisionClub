@@ -1,6 +1,6 @@
 const { test, expect } = require("@playwright/test");
 
-test("the eight base question formats render and accept their intended responses", async ({
+test("the nine base question formats render and accept their intended responses", async ({
   page,
 }) => {
   test.setTimeout(120000);
@@ -35,6 +35,13 @@ test("the eight base question formats render and accept their intended responses
   await format.selectOption("matching");
   await expect(
     page.getByLabel("Matching prompts 1", { exact: true }),
+  ).toBeVisible();
+  await format.selectOption("fill_blanks");
+  await expect(
+    page.getByLabel("Word 1 for question 1", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Hide word box from students", { exact: true }),
   ).toBeVisible();
 
   const questions = [
@@ -107,6 +114,19 @@ test("the eight base question formats render and accept their intended responses
     },
     {
       id: "7",
+      type: "fill_blanks",
+      text: "Plants need ___ and ___ to grow.",
+      marks: 2,
+      topic: "Plants",
+      page: 1,
+      space: 2,
+      lineSpacing: 8,
+      hideWordBox: false,
+      options: ["water", "sunlight", "stone"],
+      items: [],
+    },
+    {
+      id: "8",
       type: "ordering",
       text: "Put the stages in order.",
       marks: 3,
@@ -117,7 +137,7 @@ test("the eight base question formats render and accept their intended responses
       items: [],
     },
     {
-      id: "8",
+      id: "9",
       type: "matching",
       text: "Match each number to its Chinese numeral.",
       marks: 2,
@@ -131,7 +151,7 @@ test("the eight base question formats render and accept their intended responses
   const response = await page.request.post("/api/club/papers", {
     headers: { Origin: "http://127.0.0.1:3010" },
     data: {
-      title: "Seven question formats",
+      title: "Nine question formats",
       subject: "Maths",
       grade: "Primary 1",
       difficulty: "Foundation",
@@ -148,12 +168,13 @@ test("the eight base question formats render and accept their intended responses
         { questionId: "4", answer: "4" },
         { questionId: "5", answer: "6" },
         { questionId: "6", answer: "apple" },
+        { questionId: "7", answer: "water | sunlight" },
         {
-          questionId: "7",
+          questionId: "8",
           answer: JSON.stringify(["Wake up", "Eat breakfast", "Go to school"]),
         },
         {
-          questionId: "8",
+          questionId: "9",
           answer: JSON.stringify({ one: "一", two: "二" }),
         },
       ],
@@ -172,6 +193,8 @@ test("the eight base question formats render and accept their intended responses
   await expect(page.locator(".comprehension-box")).toContainText(
     "Sam went to the market",
   );
+  await expect(page.locator(".fill-word-box")).toContainText("sunlight");
+  await expect(page.locator(".fill-blank-fields > div")).toHaveCount(2);
   await expect(page.locator(".ordering-response")).toHaveCount(1);
   await expect(page.locator(".matching-response")).toHaveCount(1);
 
@@ -188,19 +211,25 @@ test("the eight base question formats render and accept their intended responses
   await page.getByLabel("Answer to question 4").fill("2 + 2 = 4");
   await page.getByLabel("Answer to question 5").fill("6");
   await page.getByLabel("Answer to question 6").fill("apple");
-  await page.getByLabel("Position 1 for question 7").selectOption("Wake up");
+  await page.getByRole("button", { name: "water", exact: true }).click();
+  await page.getByRole("button", { name: "sunlight", exact: true }).click();
+  await expect(page.getByLabel("Blank 1 for question 7")).toHaveValue("water");
+  await expect(page.getByLabel("Blank 2 for question 7")).toHaveValue(
+    "sunlight",
+  );
+  await page.getByLabel("Position 1 for question 8").selectOption("Wake up");
   await page
-    .getByLabel("Position 2 for question 7")
+    .getByLabel("Position 2 for question 8")
     .selectOption("Eat breakfast");
   await page
-    .getByLabel("Position 3 for question 7")
+    .getByLabel("Position 3 for question 8")
     .selectOption("Go to school");
   await page.getByLabel("Match for one").selectOption("一");
   await page.getByLabel("Match for two").selectOption("二");
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Draft answers saved.")).toBeVisible();
   await page.screenshot({
-    path: "test-results/seven-question-formats.png",
+    path: "test-results/nine-question-formats.png",
     fullPage: true,
   });
   expect(errors).toEqual([]);

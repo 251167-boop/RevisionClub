@@ -24,6 +24,7 @@ const QUESTION_TYPES = [
   ["answer_space", "Large blank answer space"],
   ["short_answer", "Short answer"],
   ["comprehension", "Comprehension passage"],
+  ["fill_blanks", "Fill in the blanks"],
   ["ordering", "Ordering"],
   ["matching", "Matching"],
 ];
@@ -36,14 +37,15 @@ function cleanChoice(value) {
     ? stripChoiceLabel(value)
     : String(value || "").trim();
 }
-function answerSpaceValue(space) {
-  const value = Number(space || 4);
-  if (value <= 2) return "small";
-  if (value >= 8) return "large";
-  if (value >= 5) return "medium";
-  return "auto";
+function blankCount(text) {
+  return Math.min(12, (String(text || "").match(/_{3,}/g) || []).length || 1);
 }
-const ANSWER_SPACES = { auto: 4, small: 2, medium: 5, large: 9 };
+function fillBlankAnswers(value, count) {
+  const answers = String(value || "")
+    .split(/\s*\|\s*/)
+    .slice(0, count);
+  return Array.from({ length: count }, (_, index) => answers[index] || "");
+}
 const ASPECTS = [
   "Font / typography",
   "Font size",
@@ -739,6 +741,7 @@ export function CreatePaper() {
                         marks: 4,
                         page: 1,
                         space: 4,
+                        lineSpacing: 7,
                         topic: "General",
                         options: [],
                         items: [],
@@ -762,6 +765,36 @@ export function CreatePaper() {
         </div>
       )}
     </>
+  );
+}
+function NumberStepper({ label, value, min, max, unit, onChange }) {
+  const number = Math.min(max, Math.max(min, Number(value) || min));
+  return (
+    <div className="number-stepper">
+      <span>{label}</span>
+      <div>
+        <button
+          type="button"
+          aria-label={`Decrease ${label.toLowerCase()}`}
+          disabled={number <= min}
+          onClick={() => onChange(number - 1)}
+        >
+          −
+        </button>
+        <output aria-label={label}>
+          {number}
+          {unit ? ` ${unit}` : ""}
+        </output>
+        <button
+          type="button"
+          aria-label={`Increase ${label.toLowerCase()}`}
+          disabled={number >= max}
+          onClick={() => onChange(number + 1)}
+        >
+          +
+        </button>
+      </div>
+    </div>
   );
 }
 function QuestionEditorCard({
@@ -820,6 +853,13 @@ function QuestionEditorCard({
         ? { answer: "" }
         : null;
     onChoices(next, answerChanges);
+  }
+
+  function setWord(wordIndex, value) {
+    const next = [...choices];
+    while (next.length <= wordIndex) next.push("");
+    next[wordIndex] = value;
+    onChoices(next, null);
   }
 
   return (
@@ -912,6 +952,11 @@ function QuestionEditorCard({
               rows={3}
               value={q.text}
               onChange={(event) => onQuestion("text", event.target.value)}
+              placeholder={
+                type === "fill_blanks"
+                  ? "Write the sentence and use ___ for every blank."
+                  : undefined
+              }
             />
           </label>
           <div className="question-edit-basics">
@@ -1011,6 +1056,64 @@ function QuestionEditorCard({
             </fieldset>
           )}
 
+          {type === "fill_blanks" && (
+            <fieldset className="word-box-editor">
+              <legend>Editable word box</legend>
+              <p className="muted small">
+                Use <b>___</b> in the question for each blank. Words appear in
+                this order unless you rearrange them here.
+              </p>
+              <div className="word-box-editor-grid">
+                {(choices.length ? choices : [""]).map((word, wordIndex) => (
+                  <div key={wordIndex}>
+                    <input
+                      aria-label={`Word ${wordIndex + 1} for question ${q.id}`}
+                      value={word}
+                      placeholder={`Word ${wordIndex + 1}`}
+                      onChange={(event) =>
+                        setWord(wordIndex, event.target.value)
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label={`Remove word ${wordIndex + 1} from question ${q.id}`}
+                      disabled={choices.length <= 1}
+                      onClick={() =>
+                        onChoices(
+                          choices.filter((_, index) => index !== wordIndex),
+                          null,
+                        )
+                      }
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="word-box-actions">
+                <button
+                  type="button"
+                  className="text-button"
+                  disabled={choices.length >= 16}
+                  onClick={() => onChoices([...choices, ""], null)}
+                >
+                  ＋ Add word
+                </button>
+                <label className="check compact-check">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(q.hideWordBox)}
+                    onChange={(event) =>
+                      onQuestion("hideWordBox", event.target.checked)
+                    }
+                  />
+                  Hide word box from students
+                </label>
+              </div>
+            </fieldset>
+          )}
+
           {type === "ordering" && (
             <label>
               Items to order (one per line)
@@ -1059,13 +1162,20 @@ function QuestionEditorCard({
 
           {!isMultipleChoice && (
             <label>
-              Correct answer{" "}
+              {type === "fill_blanks"
+                ? "Correct answers in blank order"
+                : "Correct answer"}{" "}
               <span className="muted small">PRIVATE · CREATOR ONLY</span>
               <textarea
                 aria-label={`Answer key ${q.id}`}
                 rows={type === "short_answer" ? 2 : 4}
                 value={answer.answer || ""}
                 onChange={(event) => onKey({ answer: event.target.value })}
+                placeholder={
+                  type === "fill_blanks"
+                    ? "Separate answers with |, for example: plant | sunlight"
+                    : undefined
+                }
               />
             </label>
           )}
@@ -1083,21 +1193,23 @@ function QuestionEditorCard({
               {["short_answer", "answer_space", "comprehension"].includes(
                 type,
               ) && (
-                <label>
-                  Answer space
-                  <select
-                    aria-label={`Answer space for question ${q.id}`}
-                    value={answerSpaceValue(q.space)}
-                    onChange={(event) =>
-                      onQuestion("space", ANSWER_SPACES[event.target.value])
-                    }
-                  >
-                    <option value="auto">Auto</option>
-                    <option value="small">Small</option>
-                    <option value="medium">Medium</option>
-                    <option value="large">Large</option>
-                  </select>
-                </label>
+                <>
+                  <NumberStepper
+                    label="Answer lines"
+                    value={q.space || 4}
+                    min={1}
+                    max={16}
+                    onChange={(value) => onQuestion("space", value)}
+                  />
+                  <NumberStepper
+                    label="Line spacing"
+                    value={q.lineSpacing || 7}
+                    min={4}
+                    max={14}
+                    unit="mm"
+                    onChange={(value) => onQuestion("lineSpacing", value)}
+                  />
+                </>
               )}
               <label className="page-break-setting">
                 <input
@@ -1251,6 +1363,12 @@ export function PaperEditor({
       next.options = q.options?.length >= 2 ? q.options : ["", ""];
     }
     if (type === "ordering" && q.options?.length < 2) next.options = ["", ""];
+    if (type === "fill_blanks") {
+      next.options = q.options?.length ? q.options : [""];
+      next.hideWordBox = Boolean(q.hideWordBox);
+      if (!String(q.text || "").includes("___"))
+        next.text = q.text ? `${q.text} ___` : "Complete the sentence: ___";
+    }
     update({
       ...content,
       questions: content.questions.map((item) =>
@@ -1504,6 +1622,7 @@ export function PaperEditor({
                           marks: 2,
                           page: selectedPage,
                           space: 4,
+                          lineSpacing: 7,
                           topic: "General",
                           options: [],
                           items: [],
@@ -1551,6 +1670,114 @@ function readableAnswer(value) {
       .map(([prompt, answer]) => `${prompt} → ${answer}`)
       .join("; ");
   return value || "(No answer)";
+}
+
+function safeFileName(value) {
+  return String(value || "practice-paper")
+    .replace(/[\\/:*?"<>|]+/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 90);
+}
+
+function escapeExportText(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function exportWordPaper(title) {
+  const pages = [...document.querySelectorAll("article.exam-paper")];
+  if (!pages.length) throw new Error("The paper preview is not ready yet.");
+  const styles = `
+    @page { size: A4; margin: 15mm; }
+    body { color:#202d27; font-family:Georgia,'Times New Roman',serif; font-size:10.5pt; }
+    .exam-paper { page-break-after:always; min-height:250mm; }
+    .exam-paper:last-child { page-break-after:auto; }
+    .exam-brand,.exam-meta,.question-heading { display:flex; justify-content:space-between; gap:14px; }
+    .exam-brand { border-bottom:2px solid #334c3e; padding-bottom:10px; margin-bottom:20px; font-family:Arial,sans-serif; font-size:8pt; letter-spacing:1px; }
+    h2 { text-align:center; font-weight:400; }
+    .exam-meta,.exam-instructions { border-bottom:1px solid #bbb; padding-bottom:10px; }
+    .exam-question { padding:14px 0; page-break-inside:avoid; }
+    .question-heading strong { flex:1; font-weight:400; white-space:pre-wrap; }
+    .mc-option { display:flex; justify-content:space-between; border:1px solid #bbb; padding:6px 8px; margin:5px 0; }
+    .mc_single_box .mc-option { border:0; }
+    .choice-box,.choice-circle { display:inline-block; width:18px; height:18px; border:1px solid #263c30; }
+    .choice-circle { border-radius:50%; }
+    .answer-lines div,.short-answer-line,.fill-blank-fields i { display:block; min-height:7mm; border-bottom:1px dotted #777; }
+    .blank-answer-space,.comprehension-box { min-height:35mm; border:1px solid #777; padding:10px; }
+    .fill-word-box,.ordering-bank,.matching-bank { border:1px solid #777; padding:8px; margin:10px 0; }
+    .fill-word-box span,.ordering-bank span { display:inline-block; margin:3px 10px; }
+    .fill-blank-fields div { display:flex; gap:8px; align-items:end; margin:6px 0; }
+    .fill-blank-fields i { flex:1; }
+    .exam-footer { display:flex; justify-content:space-between; margin-top:20px; font-size:8pt; }
+  `;
+  const documentHtml = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeExportText(title)}</title><style>${styles}</style></head><body>${pages
+    .map((page) => page.outerHTML)
+    .join("")}</body></html>`;
+  const blob = new Blob(["\ufeff", documentHtml], {
+      type: "application/msword;charset=utf-8",
+    }),
+    url = URL.createObjectURL(blob),
+    link = document.createElement("a");
+  link.href = url;
+  link.download = `${safeFileName(title)}.doc`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function exportPdfPaper(title, setMessage) {
+  const pages = [...document.querySelectorAll("article.exam-paper")];
+  if (!pages.length) throw new Error("The paper preview is not ready yet.");
+  setMessage("Preparing your PDF…");
+  const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+      import("html2canvas"),
+      import("jspdf"),
+    ]),
+    pdf = new jsPDF({ unit: "mm", format: "a4", compress: true });
+  for (let index = 0; index < pages.length; index++) {
+    if (index) pdf.addPage("a4", "portrait");
+    const canvas = await html2canvas(pages[index], {
+        backgroundColor: "#ffffff",
+        logging: false,
+        scale: 2,
+        useCORS: true,
+        windowWidth: Math.max(900, document.documentElement.clientWidth),
+      }),
+      availableWidth = 186,
+      availableHeight = 273,
+      naturalHeight = (canvas.height / canvas.width) * availableWidth,
+      scale = Math.min(1, availableHeight / naturalHeight),
+      width = availableWidth * scale,
+      height = naturalHeight * scale;
+    pdf.addImage(
+      canvas.toDataURL("image/jpeg", 0.94),
+      "JPEG",
+      (210 - width) / 2,
+      12,
+      width,
+      height,
+      undefined,
+      "FAST",
+    );
+  }
+  pdf.save(`${safeFileName(title)}.pdf`);
+  setMessage("PDF downloaded.");
+}
+
+function openPrintDialog(setMessage) {
+  setMessage("Print view prepared at true A4 scale.");
+  document.documentElement.dataset.paperOutput = "print";
+  const clear = () => {
+    delete document.documentElement.dataset.paperOutput;
+    window.removeEventListener("afterprint", clear);
+  };
+  window.addEventListener("afterprint", clear);
+  window.setTimeout(() => window.print(), 50);
 }
 
 function QuestionResponse({ question, value = "", onChange }) {
@@ -1609,12 +1836,65 @@ function QuestionResponse({ question, value = "", onChange }) {
         })}
       </div>
     );
+  if (type === "fill_blanks") {
+    const count = blankCount(question.text),
+      answers = fillBlankAnswers(value, count),
+      updateBlank = (index, answer) => {
+        const next = [...answers];
+        next[index] = answer;
+        onChange(next.join(" | "));
+      },
+      chooseWord = (word) => {
+        const empty = answers.findIndex((answer) => !answer);
+        if (empty >= 0) updateBlank(empty, word);
+      };
+    return (
+      <div className="fill-blanks-response">
+        {!question.hideWordBox && (
+          <div className="fill-word-box" aria-label="Word box">
+            {(question.options || []).map((word, index) =>
+              editable ? (
+                <button
+                  type="button"
+                  key={`${word}-${index}`}
+                  onClick={() => chooseWord(word)}
+                >
+                  {word}
+                </button>
+              ) : (
+                <span key={`${word}-${index}`}>{word}</span>
+              ),
+            )}
+          </div>
+        )}
+        <div className="fill-blank-fields">
+          {answers.map((answer, index) =>
+            editable ? (
+              <label key={index}>
+                <span>Blank {index + 1}</span>
+                <input
+                  aria-label={`Blank ${index + 1} for question ${question.id}`}
+                  value={answer}
+                  onChange={(event) => updateBlank(index, event.target.value)}
+                />
+              </label>
+            ) : (
+              <div key={index}>
+                <span>{index + 1}</span>
+                <i />
+              </div>
+            ),
+          )}
+        </div>
+      </div>
+    );
+  }
   if (type === "answer_space")
     return editable ? (
       <textarea
         className="blank-answer-space"
         aria-label={"Answer to question " + question.id}
-        rows={Math.max(5, question.space)}
+        rows={Math.max(1, Number(question.space || 4))}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder="Write your answer and working here…"
@@ -1622,7 +1902,9 @@ function QuestionResponse({ question, value = "", onChange }) {
     ) : (
       <div
         className="blank-answer-space print-space"
-        style={{ minHeight: `${Math.max(5, question.space) * 7}mm` }}
+        style={{
+          minHeight: `${Math.max(1, Number(question.space || 4)) * (question.lineSpacing || 7)}mm`,
+        }}
       />
     );
   if (type === "ordering") {
@@ -1713,7 +1995,7 @@ function QuestionResponse({ question, value = "", onChange }) {
     );
   }
   if (editable)
-    return type === "short_answer" ? (
+    return type === "short_answer" && Number(question.space || 1) === 1 ? (
       <input
         className="short-answer-input"
         aria-label={"Answer to question " + question.id}
@@ -1730,9 +2012,13 @@ function QuestionResponse({ question, value = "", onChange }) {
         placeholder="Write your answer here…"
       />
     );
-  if (type === "short_answer") return <div className="short-answer-line" />;
+  if (type === "short_answer" && Number(question.space || 1) === 1)
+    return <div className="short-answer-line" />;
   return (
-    <div className="answer-lines">
+    <div
+      className="answer-lines"
+      style={{ "--answer-line-spacing": `${question.lineSpacing || 7}mm` }}
+    >
       {Array.from({ length: question.space }, (_, index) => (
         <div key={index} />
       ))}
@@ -1872,8 +2158,30 @@ export function PaperDetail({ id }) {
         title={data.title}
         description={`${data.subject} · Version ${v.number} · ${data.state}`}
       >
-        <button className="secondary" onClick={() => window.print()}>
-          ↓ Export PDF / Print
+        <button
+          className="secondary"
+          onClick={() =>
+            action(async () => exportPdfPaper(data.title, setMessage))
+          }
+        >
+          ↓ Save PDF
+        </button>
+        <button
+          className="secondary"
+          onClick={() =>
+            action(async () => {
+              exportWordPaper(data.title);
+              setMessage("Word document downloaded.");
+            })
+          }
+        >
+          ↓ Export Word
+        </button>
+        <button
+          className="secondary"
+          onClick={() => openPrintDialog(setMessage)}
+        >
+          Print
         </button>
         <button
           onClick={() =>
@@ -2070,8 +2378,8 @@ export function PaperDetail({ id }) {
                   : "Answer key required before attempting"}
               </p>
               <p className="small muted">
-                Use Export, then choose “Save as PDF” in your browser’s print
-                dialog. A4 layout is included.
+                Save an A4 PDF, download an editable Word document, or print at
+                true A4 scale using the separate actions above.
               </p>
             </section>
             {owner && (

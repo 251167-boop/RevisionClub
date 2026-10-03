@@ -68,9 +68,20 @@ test("dashboard, sidebar and editor use progressive disclosure", async ({
     question.getByText("Insert page break", { exact: true }),
   ).toBeVisible();
   await expect(
-    question.getByLabel("Answer space for question 1", { exact: true }),
+    question.getByLabel("Answer lines", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    question.getByLabel("Line spacing", { exact: true }),
   ).toBeVisible();
   await expect(
     question.getByLabel("Accepted alternatives 1", { exact: true }),
+  ).toBeVisible();
+
+  await page.goto("/progress");
+  await expect(
+    page.getByRole("heading", { name: "A little more growing to do." }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("under construction", { exact: false }),
   ).toBeVisible();
 });

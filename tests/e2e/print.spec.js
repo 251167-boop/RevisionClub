@@ -41,10 +41,19 @@ test("print output includes every question and excludes app controls and private
     expect(response.ok()).toBeTruthy();
     const paper = await response.json();
     await page.goto("/papers/" + paper.paperId);
+    await expect(page.getByRole("button", { name: "Save PDF" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Export Word" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Print", exact: true }),
+    ).toBeVisible();
     await expect(page.locator("article.exam-paper")).toHaveCount(dense ? 1 : 2);
     await page.emulateMedia({ media: "print" });
     await expect(page.locator(".topbar")).toBeHidden();
-    await expect(page.getByRole("link", { name: "Skip to main content" })).toBeHidden();
+    await expect(
+      page.getByRole("link", { name: "Skip to main content" }),
+    ).toBeHidden();
     await expect(
       page.getByText("Private marking scheme", { exact: true }),
     ).toBeHidden();

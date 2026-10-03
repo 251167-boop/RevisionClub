@@ -60,7 +60,7 @@ test("exponential XP and all level boundaries", () => {
 });
 test("subjects and AI output validation", () => {
   assert.equal(r.SUBJECTS.length, 11);
-  assert.equal(r.QUESTION_TYPES.length, 8);
+  assert.equal(r.QUESTION_TYPES.length, 9);
   assert.throws(() => r.validSubject("Mathematics"));
   assert.throws(() =>
     r.validatePaper({
@@ -87,10 +87,19 @@ test("subjects and AI output validation", () => {
         type: "comprehension",
         passage: "Read this passage.",
       },
-      { ...base, id: "7", type: "ordering", options: ["First", "Second"] },
       {
         ...base,
-        id: "8",
+        id: "7",
+        type: "fill_blanks",
+        text: "Plants need ___ and ___ to grow.",
+        options: ["water", "sunlight", "stone"],
+        hideWordBox: true,
+        lineSpacing: 9,
+      },
+      { ...base, id: "8", type: "ordering", options: ["First", "Second"] },
+      {
+        ...base,
+        id: "9",
         type: "matching",
         items: ["One", "Two"],
         options: ["一", "二"],
@@ -100,6 +109,10 @@ test("subjects and AI output validation", () => {
     r.validatePaper({ ...content, questions }).questions.map((q) => q.type),
     r.QUESTION_TYPES,
   );
+  const fillBlanks = r.validatePaper({ ...content, questions }).questions[6];
+  assert.equal(fillBlanks.hideWordBox, true);
+  assert.equal(fillBlanks.lineSpacing, 9);
+  assert.deepEqual(fillBlanks.options, ["water", "sunlight", "stone"]);
   assert.deepEqual(
     r.validatePaper({
       ...content,
@@ -142,6 +155,14 @@ test("subjects and AI output validation", () => {
       ...content,
       questions: [
         { ...base, type: "matching", items: ["One"], options: ["A", "B"] },
+      ],
+    }),
+  );
+  assert.throws(() =>
+    r.validatePaper({
+      ...content,
+      questions: [
+        { ...base, type: "fill_blanks", options: ["water", "sunlight"] },
       ],
     }),
   );
@@ -1298,18 +1319,37 @@ test("product completion adds paged discovery, unified search and revision-paper
     const saved = s.savePaper(
       1,
       { title: `Discoverable Maths ${i}`, subject: "Maths" },
-      { ...content, grade: i % 2 ? "Primary 6" : "Secondary 1", difficulty: "Standard" },
+      {
+        ...content,
+        grade: i % 2 ? "Primary 6" : "Secondary 1",
+        difficulty: "Standard",
+      },
       key,
     );
     s.mutate(1, "publish", { paperId: saved.paperId, public: true });
   }
-  const first = s.paperPage(2, true, 1, 6, { query: "Discoverable", subject: "Maths" });
+  const first = s.paperPage(2, true, 1, 6, {
+    query: "Discoverable",
+    subject: "Maths",
+  });
   assert.equal(first.items.length, 6);
   assert.equal(first.total, 15);
   assert.equal(first.pages, 3);
-  assert.ok(db.prepare("PRAGMA index_list(rc_papers)").all().some((index) => index.name === "rc_papers_public_updated"));
-  assert.equal(s.paperPage(2, true, 3, 6, { query: "Discoverable" }).items.length, 3);
-  assert.ok(s.globalSearch(2, "discoverable").some((item) => item.type === "Community paper"));
+  assert.ok(
+    db
+      .prepare("PRAGMA index_list(rc_papers)")
+      .all()
+      .some((index) => index.name === "rc_papers_public_updated"),
+  );
+  assert.equal(
+    s.paperPage(2, true, 3, 6, { query: "Discoverable" }).items.length,
+    3,
+  );
+  assert.ok(
+    s
+      .globalSearch(2, "discoverable")
+      .some((item) => item.type === "Community paper"),
+  );
   const game = s.revisionGame(2, first.items[0].version_id);
   assert.equal(game.name, "Revision Mix");
   assert.equal(game.questions[0].answer, "4");
@@ -1326,9 +1366,16 @@ test("message history paginates without duplicates and preserves access checks",
   const latest = s.messages(2, { friendId: 1, limit: 25 });
   assert.equal(latest.items.length, 25);
   assert.equal(latest.hasMore, true);
-  const older = s.messages(2, { friendId: 1, before: latest.nextCursor, limit: 25 });
+  const older = s.messages(2, {
+    friendId: 1,
+    before: latest.nextCursor,
+    limit: 25,
+  });
   assert.equal(older.items.length, 25);
-  assert.equal(new Set([...latest.items, ...older.items].map((item) => item.id)).size, 50);
+  assert.equal(
+    new Set([...latest.items, ...older.items].map((item) => item.id)).size,
+    50,
+  );
   assert.throws(() => s.messages(3, { friendId: 1 }), /denied/);
   db.close();
 });
@@ -1345,7 +1392,9 @@ test("recurring series, exams, avatars and notification preferences have owned l
     recurrence: "Weekly",
     timezone: "Asia/Hong_Kong",
   });
-  const before = db.prepare("SELECT * FROM rc_sessions WHERE id=?").get(session.id);
+  const before = db
+    .prepare("SELECT * FROM rc_sessions WHERE id=?")
+    .get(session.id);
   assert.ok(before.series_id);
   assert.equal(before.timezone, "Asia/Hong_Kong");
   s.mutate(1, "sessionUpdate", {
@@ -1359,7 +1408,9 @@ test("recurring series, exams, avatars and notification preferences have owned l
     timezone: "America/New_York",
     applyToSeries: true,
   });
-  const changed = db.prepare("SELECT * FROM rc_sessions WHERE id=?").get(session.id);
+  const changed = db
+    .prepare("SELECT * FROM rc_sessions WHERE id=?")
+    .get(session.id);
   assert.equal(changed.topic, "Equations");
   assert.equal(changed.timezone, "America/New_York");
   const exam = s.mutate(1, "examCreate", {
@@ -1369,16 +1420,49 @@ test("recurring series, exams, avatars and notification preferences have owned l
     notes: "Chapters 1–4",
   });
   assert.equal(s.dashboard(1).exams[0].id, exam.id);
-  assert.throws(() => s.mutate(2, "examUpdate", { id: exam.id, title: "No", subject: "Maths", startsAt: start }), /unavailable/);
+  assert.throws(
+    () =>
+      s.mutate(2, "examUpdate", {
+        id: exam.id,
+        title: "No",
+        subject: "Maths",
+        startsAt: start,
+      }),
+    /unavailable/,
+  );
   s.mutate(1, "profileAvatar", { avatar: "data:image/png;base64,YQ==" });
-  assert.match(db.prepare("SELECT avatar_url FROM users WHERE id=1").get().avatar_url, /^data:image/);
-  assert.throws(() => s.mutate(1, "profileAvatar", { avatar: "https://example.test/avatar.png" }), /PNG/);
-  s.mutate(1, "notificationPreferences", { studyReminders: false, socialUpdates: true, achievementUpdates: true });
-  const count = db.prepare("SELECT COUNT(*) n FROM rc_notifications WHERE user_id=1").get().n;
+  assert.match(
+    db.prepare("SELECT avatar_url FROM users WHERE id=1").get().avatar_url,
+    /^data:image/,
+  );
+  assert.throws(
+    () =>
+      s.mutate(1, "profileAvatar", {
+        avatar: "https://example.test/avatar.png",
+      }),
+    /PNG/,
+  );
+  s.mutate(1, "notificationPreferences", {
+    studyReminders: false,
+    socialUpdates: true,
+    achievementUpdates: true,
+  });
+  const count = db
+    .prepare("SELECT COUNT(*) n FROM rc_notifications WHERE user_id=1")
+    .get().n;
   s.notify(1, "Study session begins soon", "Hidden reminder", "/timetable");
-  assert.equal(db.prepare("SELECT COUNT(*) n FROM rc_notifications WHERE user_id=1").get().n, count);
+  assert.equal(
+    db.prepare("SELECT COUNT(*) n FROM rc_notifications WHERE user_id=1").get()
+      .n,
+    count,
+  );
   s.mutate(1, "sessionDeleteSeries", { id: session.id });
-  assert.equal(db.prepare("SELECT COUNT(*) n FROM rc_sessions WHERE series_id=?").get(before.series_id).n, 0);
+  assert.equal(
+    db
+      .prepare("SELECT COUNT(*) n FROM rc_sessions WHERE series_id=?")
+      .get(before.series_id).n,
+    0,
+  );
   db.close();
 });
 
@@ -1399,8 +1483,14 @@ test("weekly local times survive daylight-saving offset changes", () => {
 
 test("non-maths minigames expose selectable expanded topic banks", () => {
   const games = require("../lib/club/games.cjs");
-  assert.equal(games.makeGame("Timeline", "Chinese history").topic, "Chinese history");
+  assert.equal(
+    games.makeGame("Timeline", "Chinese history").topic,
+    "Chinese history",
+  );
   assert.equal(games.makeGame("Keyword Blitz", "ICT").questions.length, 8);
-  assert.equal(games.makeGame("True or Trap", "Geography").questions.length, 10);
+  assert.equal(
+    games.makeGame("True or Trap", "Geography").questions.length,
+    10,
+  );
   assert.throws(() => games.makeGame("Timeline", "Algebra"), /available topic/);
 });

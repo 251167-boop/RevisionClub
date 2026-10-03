@@ -27,7 +27,7 @@ const nav = [
       ["Community papers", "/community"], ["Leaderboard", "/leaderboard"],
     ],
   },
-  { label: "Progress", icon: "▥", href: "/profile" },
+  { label: "Progress", icon: "▥", href: "/progress" },
   {
     label: "More", icon: "◇", links: [
       ["Minigames", "/minigames"], ["Settings", "/settings"],
