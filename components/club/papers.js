@@ -828,6 +828,10 @@ function QuestionEditorCard({
         answer.answer?.toUpperCase() === letter
       );
     });
+  const [answerSpaceShortcutOpen, setAnswerSpaceShortcutOpen] = useState(false);
+  const hasAnswerLines = ["short_answer", "answer_space", "comprehension"].includes(
+    type,
+  );
 
   function setChoice(choiceIndex, value) {
     const next = [...choices];
@@ -941,7 +945,48 @@ function QuestionEditorCard({
           {type === "comprehension" && q.passage && (
             <div className="comprehension-box">{q.passage}</div>
           )}
-          <QuestionResponse question={q} />
+          <QuestionResponse
+            question={q}
+            answerSpaceShortcut={
+              hasAnswerLines
+                ? {
+                    open: answerSpaceShortcutOpen,
+                    onOpen: () => setAnswerSpaceShortcutOpen(true),
+                    controls: (
+                      <div
+                        className="answer-space-shortcut-controls"
+                        aria-label="Answer space shortcuts"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <NumberStepper
+                          label="Answer lines"
+                          value={q.space || 4}
+                          min={1}
+                          max={16}
+                          onChange={(value) => onQuestion("space", value)}
+                        />
+                        <NumberStepper
+                          label="Line spacing"
+                          value={q.lineSpacing || 7}
+                          min={4}
+                          max={14}
+                          unit="mm"
+                          onChange={(value) => onQuestion("lineSpacing", value)}
+                        />
+                        <button
+                          type="button"
+                          className="answer-space-shortcut-close"
+                          aria-label="Close answer space shortcuts"
+                          onClick={() => setAnswerSpaceShortcutOpen(false)}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ),
+                  }
+                : undefined
+            }
+          />
         </div>
       ) : (
         <div className="question-edit-panel">
@@ -1706,7 +1751,7 @@ function exportWordPaper(title) {
     .mc_single_box .mc-option { border:0; }
     .choice-box,.choice-circle { display:inline-block; width:18px; height:18px; border:1px solid #263c30; }
     .choice-circle { border-radius:50%; }
-    .answer-lines div,.short-answer-line,.fill-blank-fields i { display:block; min-height:7mm; border-bottom:1px dotted #777; }
+    .answer-lines div,.short-answer-line,.fill-blank-fields i { display:block; min-height:7mm; border-bottom:1px solid #000; }
     .blank-answer-space,.comprehension-box { min-height:35mm; border:1px solid #777; padding:10px; }
     .fill-word-box,.ordering-bank,.matching-bank { border:1px solid #777; padding:8px; margin:10px 0; }
     .fill-word-box span,.ordering-bank span { display:inline-block; margin:3px 10px; }
@@ -1780,11 +1825,38 @@ function openPrintDialog(setMessage) {
   window.setTimeout(() => window.print(), 50);
 }
 
-function QuestionResponse({ question, value = "", onChange }) {
+function QuestionResponse({ question, value = "", onChange, answerSpaceShortcut }) {
   const type = questionType(question),
     rawOptions = question.options || [],
     options = MC_TYPES.has(type) ? rawOptions.map(cleanChoice) : rawOptions,
     editable = Boolean(onChange);
+  const answerSpaceSurface = (children, className = "answer-lines") => (
+    <div
+      className={`${className} ${answerSpaceShortcut?.open ? "is-shortcut-open" : ""}`}
+      style={
+        className === "answer-lines"
+          ? { "--answer-line-spacing": `${question.lineSpacing || 7}mm` }
+          : undefined
+      }
+      onClick={answerSpaceShortcut?.onOpen}
+      role={answerSpaceShortcut ? "button" : undefined}
+      tabIndex={answerSpaceShortcut ? 0 : undefined}
+      onKeyDown={
+        answerSpaceShortcut
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                answerSpaceShortcut.onOpen();
+              }
+            }
+          : undefined
+      }
+      aria-label={answerSpaceShortcut ? "Edit answer space" : undefined}
+    >
+      {answerSpaceShortcut?.open && answerSpaceShortcut.controls}
+      {children}
+    </div>
+  );
   if (type === "mc_box" || type === "mc_single_box" || type === "mc_circle")
     return (
       <div className={`mc-options ${type}`}>
@@ -1899,14 +1971,16 @@ function QuestionResponse({ question, value = "", onChange }) {
         onChange={(event) => onChange(event.target.value)}
         placeholder="Write your answer and working here…"
       />
-    ) : (
-      <div
-        className="blank-answer-space print-space"
-        style={{
-          minHeight: `${Math.max(1, Number(question.space || 4)) * (question.lineSpacing || 7)}mm`,
-        }}
-      />
-    );
+    ) :
+      answerSpaceSurface(
+        <div
+          className="blank-answer-space print-space"
+          style={{
+            minHeight: `${Math.max(1, Number(question.space || 4)) * (question.lineSpacing || 7)}mm`,
+          }}
+        />,
+        "answer-space-shortcut-target",
+      );
   if (type === "ordering") {
     const ordered = parsedAnswer(value, []);
     return (
@@ -2013,16 +2087,18 @@ function QuestionResponse({ question, value = "", onChange }) {
       />
     );
   if (type === "short_answer" && Number(question.space || 1) === 1)
-    return <div className="short-answer-line" />;
-  return (
-    <div
-      className="answer-lines"
-      style={{ "--answer-line-spacing": `${question.lineSpacing || 7}mm` }}
-    >
-      {Array.from({ length: question.space }, (_, index) => (
-        <div key={index} />
-      ))}
-    </div>
+    return answerSpaceSurface(
+      <div className="short-answer-line" />,
+      "answer-space-shortcut-target",
+    );
+  return answerSpaceSurface(
+    <>
+      <div className="answer-lines-content">
+        {Array.from({ length: question.space || 4 }, (_, index) => (
+          <div key={index} />
+        ))}
+      </div>
+    </>,
   );
 }
 

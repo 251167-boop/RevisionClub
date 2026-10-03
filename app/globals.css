@@ -1327,11 +1327,68 @@ button.stat-card:hover {
   white-space: nowrap;
 }
 .answer-lines {
+  position: relative;
   padding-top: 10px;
 }
-.answer-lines > div {
+.answer-lines-content > div {
   min-height: var(--answer-line-spacing, 7mm);
-  border-bottom: 1px dotted #d2d6cc;
+  border-bottom: 1px solid #000;
+}
+.answer-lines-content {
+  padding-top: 10px;
+}
+.answer-space-shortcut-target {
+  position: relative;
+}
+.answer-space-shortcut-target[role="button"] {
+  cursor: pointer;
+}
+.answer-space-shortcut-target[role="button"]:focus-visible {
+  outline: 2px solid var(--forest);
+  outline-offset: 4px;
+}
+.answer-lines[role="button"] {
+  cursor: pointer;
+}
+.answer-lines[role="button"]:focus-visible {
+  outline: 2px solid var(--forest);
+  outline-offset: 4px;
+}
+.answer-space-shortcut-controls {
+  position: absolute;
+  z-index: 2;
+  top: -8px;
+  right: 0;
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgb(29 52 39 / 14%);
+}
+.answer-space-shortcut-controls .number-stepper > span {
+  margin-bottom: 4px;
+  font-size: 10px;
+}
+.answer-space-shortcut-controls .number-stepper > div {
+  min-height: 32px;
+}
+.answer-space-shortcut-controls .number-stepper button {
+  min-height: 30px;
+}
+.answer-space-shortcut-controls .number-stepper output {
+  font-size: 10px;
+}
+.answer-space-shortcut-close {
+  width: 28px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
 }
 .fill-blanks-response {
   margin-top: 14px;
@@ -1485,7 +1542,7 @@ button.mc-option[aria-pressed="true"] {
 }
 .short-answer-line {
   height: 28px;
-  border-bottom: 1px solid #334c3e;
+  border-bottom: 1px solid #000;
   margin-top: 10px;
 }
 .comprehension-box {
@@ -3704,6 +3761,11 @@ button.mc-option[aria-pressed="true"] {
     display: block;
     float: none;
     margin-top: 3px;
+  }
+  .answer-space-shortcut-controls {
+    right: -4px;
+    max-width: calc(100vw - 56px);
+    flex-wrap: wrap;
   }
 }
 @media (forced-colors: active) {
