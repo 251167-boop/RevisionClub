@@ -1390,6 +1390,20 @@ button.stat-card:hover {
   color: var(--muted);
   font-size: 18px;
 }
+.apply-answer-space-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  align-self: center;
+  margin: 0;
+  color: var(--muted);
+  font: 600 10px/1.2 var(--font);
+  white-space: nowrap;
+}
+.apply-answer-space-toggle input {
+  width: auto;
+  margin: 0;
+}
 .fill-blanks-response {
   margin-top: 14px;
 }

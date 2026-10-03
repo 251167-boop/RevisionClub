@@ -816,6 +816,7 @@ function QuestionEditorCard({
   onDuplicate,
   onDelete,
   onPageBreak,
+  onAnswerSpaceChange,
 }) {
   const type = questionType(q),
     isMultipleChoice = MC_TYPES.has(type),
@@ -829,6 +830,7 @@ function QuestionEditorCard({
       );
     });
   const [answerSpaceShortcutOpen, setAnswerSpaceShortcutOpen] = useState(false);
+  const [applyAnswerSpaceToAll, setApplyAnswerSpaceToAll] = useState(false);
   const hasAnswerLines = ["short_answer", "answer_space", "comprehension"].includes(
     type,
   );
@@ -963,7 +965,12 @@ function QuestionEditorCard({
                           value={q.space || 4}
                           min={1}
                           max={16}
-                          onChange={(value) => onQuestion("space", value)}
+                          onChange={(value) =>
+                            onAnswerSpaceChange(
+                              { space: value },
+                              applyAnswerSpaceToAll,
+                            )
+                          }
                         />
                         <NumberStepper
                           label="Line spacing"
@@ -971,8 +978,32 @@ function QuestionEditorCard({
                           min={4}
                           max={14}
                           unit="mm"
-                          onChange={(value) => onQuestion("lineSpacing", value)}
+                          onChange={(value) =>
+                            onAnswerSpaceChange(
+                              { lineSpacing: value },
+                              applyAnswerSpaceToAll,
+                            )
+                          }
                         />
+                        <label className="apply-answer-space-toggle">
+                          <input
+                            type="checkbox"
+                            checked={applyAnswerSpaceToAll}
+                            onChange={(event) => {
+                              const checked = event.target.checked;
+                              setApplyAnswerSpaceToAll(checked);
+                              if (checked)
+                                onAnswerSpaceChange(
+                                  {
+                                    space: q.space || 4,
+                                    lineSpacing: q.lineSpacing || 7,
+                                  },
+                                  true,
+                                );
+                            }}
+                          />
+                          Apply to all questions
+                        </label>
                         <button
                           type="button"
                           className="answer-space-shortcut-close"
@@ -1314,6 +1345,18 @@ export function PaperEditor({
     (a, b) => a - b,
   );
   const selectedPage = pages.includes(page) ? page : pages[0];
+  useEffect(() => {
+    const pageMap = new Map(pages.map((value, index) => [value, index + 1]));
+    if (pages.every((value, index) => value === index + 1)) return;
+    setContent({
+      ...content,
+      questions: content.questions.map((q) => ({
+        ...q,
+        page: pageMap.get(q.page) || 1,
+      })),
+    });
+    setPage(pageMap.get(page) || 1);
+  }, [content, page, pages, setContent]);
   function update(next, nextKey = answerKey) {
     setHistory((h) => [...h.slice(-49), { content, answerKey }]);
     setFuture([]);
@@ -1376,6 +1419,21 @@ export function PaperEditor({
       ...content,
       questions: content.questions.map((x) =>
         x.id === q.id ? { ...x, [field]: value } : x,
+      ),
+    });
+  }
+  function updateAnswerSpace(q, changes, applyToAll) {
+    const answerLineTypes = new Set([
+      "short_answer",
+      "answer_space",
+      "comprehension",
+    ]);
+    update({
+      ...content,
+      questions: content.questions.map((item) =>
+        item.id === q.id || (applyToAll && answerLineTypes.has(questionType(item)))
+          ? { ...item, ...changes }
+          : item,
       ),
     });
   }
@@ -1643,6 +1701,9 @@ export function PaperEditor({
                         setEditingQuestion(null);
                       }}
                       onPageBreak={(enabled) => togglePageBreak(q, enabled)}
+                      onAnswerSpaceChange={(changes, applyToAll) =>
+                        updateAnswerSpace(q, changes, applyToAll)
+                      }
                     />
                   );
                 })}
