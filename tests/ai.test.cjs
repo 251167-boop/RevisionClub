@@ -108,6 +108,10 @@ test("AI generation enforces sources and validates structured responses", async 
             "A labelled water-cycle diagram showing evaporation, condensation and precipitation.",
           altText: "The water cycle with its three main labelled stages.",
           caption: "The water cycle",
+          renderData: JSON.stringify({
+            title: "The water cycle",
+            labels: ["Evaporation", "Condensation", "Precipitation"],
+          }),
         },
       })),
       answerKey: key.content,

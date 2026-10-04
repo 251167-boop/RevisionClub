@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import rules from "@/lib/club/rules.cjs";
+import { QuestionVisual } from "./question-visual";
 import {
   api,
   useData,
@@ -947,6 +948,7 @@ function QuestionEditorCard({
           {type === "comprehension" && q.passage && (
             <div className="comprehension-box">{q.passage}</div>
           )}
+          <QuestionVisual visual={q.visual} />
           <QuestionResponse
             question={q}
             answerSpaceShortcut={
@@ -1266,6 +1268,65 @@ function QuestionEditorCard({
                   onChange={(event) => onQuestion("topic", event.target.value)}
                 />
               </label>
+              {q.visual?.strategy === "deterministic" && (
+                <fieldset className="figure-settings">
+                  <legend>Figure</legend>
+                  <label>
+                    Caption
+                    <input
+                      value={q.visual.caption || ""}
+                      onChange={(event) =>
+                        onQuestion("visual", {
+                          ...q.visual,
+                          caption: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    Accessible description
+                    <input
+                      value={q.visual.altText || ""}
+                      onChange={(event) =>
+                        onQuestion("visual", {
+                          ...q.visual,
+                          altText: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="figure-instructions-field">
+                    Figure instructions
+                    <textarea
+                      rows={3}
+                      value={q.visual.description || ""}
+                      onChange={(event) =>
+                        onQuestion("visual", {
+                          ...q.visual,
+                          description: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                  <details className="figure-data-details">
+                    <summary>Advanced figure data</summary>
+                    <label>
+                      Plot data and labels (JSON)
+                      <textarea
+                        rows={4}
+                        spellCheck="false"
+                        value={q.visual.renderData || "{}"}
+                        onChange={(event) =>
+                          onQuestion("visual", {
+                            ...q.visual,
+                            renderData: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                  </details>
+                </fieldset>
+              )}
               {["short_answer", "answer_space", "comprehension"].includes(
                 type,
               ) && (
@@ -1818,6 +1879,10 @@ function exportWordPaper(title) {
     .fill-word-box span,.ordering-bank span { display:inline-block; margin:3px 10px; }
     .fill-blank-fields div { display:flex; gap:8px; align-items:end; margin:6px 0; }
     .fill-blank-fields i { flex:1; }
+    .question-visual { width:145mm; max-width:100%; margin:12px auto; page-break-inside:avoid; text-align:center; }
+    .question-visual svg { display:block; width:100%; height:auto; }
+    .question-visual figcaption { margin-top:4px; color:#536158; font:8pt Arial,sans-serif; }
+    .figure-title { font-family:Arial,sans-serif; font-weight:700; }
     .exam-footer { display:flex; justify-content:space-between; margin-top:20px; font-size:8pt; }
   `;
   const documentHtml = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeExportText(title)}</title><style>${styles}</style></head><body>${pages
@@ -2229,6 +2294,7 @@ export function ExamPaper({
                   {questionType(q) === "comprehension" && q.passage && (
                     <div className="comprehension-box">{q.passage}</div>
                   )}
+                  <QuestionVisual visual={q.visual} />
                   {item ? (
                     <div className="marked-answer">
                       <p>{readableAnswer(item.answer)}</p>

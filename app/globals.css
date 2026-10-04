@@ -1311,6 +1311,35 @@ button.stat-card:hover {
   scroll-margin-top: 30px;
   break-inside: avoid;
 }
+.question-visual {
+  width: min(100%, 520px);
+  margin: 16px auto;
+  break-inside: avoid;
+  color: #263c30;
+}
+.question-visual svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  font-family: var(--font);
+}
+.question-visual .figure-title {
+  fill: #263c30;
+  font: 700 14px var(--font);
+  text-transform: capitalize;
+}
+.question-visual .figure-description {
+  color: #536158;
+  font: 11px/1.45 var(--font);
+  text-align: center;
+}
+.question-visual figcaption {
+  margin-top: 5px;
+  color: #536158;
+  font: 10px/1.4 var(--font);
+  text-align: center;
+}
 .question-heading {
   display: flex;
   gap: 20px;
@@ -1922,6 +1951,34 @@ button.mc-option[aria-pressed="true"] {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+.figure-settings {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin: 0;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8f9f4;
+}
+.figure-settings legend {
+  padding: 0 6px;
+  color: var(--forest);
+  font: 700 11px var(--font);
+}
+.figure-settings .figure-instructions-field,
+.figure-settings .figure-data-details {
+  grid-column: 1 / -1;
+}
+.figure-data-details summary {
+  margin: 0 0 9px !important;
+  font-size: 10px;
+}
+.figure-data-details textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
 }
 .page-break-setting {
   display: flex !important;
@@ -3559,6 +3616,9 @@ button.mc-option[aria-pressed="true"] {
   .exam-question {
     break-inside: avoid;
   }
+  .question-visual {
+    max-width: 155mm;
+  }
   .answer-lines > div {
     min-height: var(--answer-line-spacing, 7mm);
   }
@@ -3757,7 +3817,8 @@ button.mc-option[aria-pressed="true"] {
   .question-edit-basics,
   .question-settings-grid,
   .matching-editor-fields,
-  .word-box-editor-grid {
+  .word-box-editor-grid,
+  .figure-settings {
     grid-template-columns: 1fr;
   }
   .word-box-actions {

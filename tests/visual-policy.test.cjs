@@ -54,13 +54,14 @@ test("paper validation persists suitable visual plans with durable IDs", () => {
 
   assert.deepEqual(paper.questions[0].visual, {
     id: "figure-1",
-    policyVersion: 1,
+    policyVersion: 2,
     strategy: "deterministic",
     type: "straight_line_graph",
     description:
       "Coordinate grid from -5 to 5 on both axes with y = 2x + 1 plotted and axes labelled x and y.",
     altText: "Graph of the straight line y equals 2x plus 1.",
     caption: "Figure 1",
+    renderData: "{}",
     status: "planned",
   });
 });
@@ -98,6 +99,21 @@ test("subject policy rejects unsuitable and misleading visual workflows", () => 
       ),
     /source_image visual workflow/,
   );
+  assert.throws(
+    () =>
+      rules.validatePaper(
+        paper({
+          needed: true,
+          strategy: "deterministic",
+          type: "straight_line_graph",
+          description: "A graph with invalid stored data.",
+          altText: "A graph.",
+          renderData: "{invalid",
+        }),
+        "Maths",
+      ),
+    /valid JSON object/,
+  );
 });
 
 test("visual plans survive the normal paper version persistence flow", () => {
@@ -122,6 +138,12 @@ test("visual plans survive the normal paper version persistence flow", () => {
                 "A coordinate grid with both axes ranging from negative five to five.",
               altText: "A blank coordinate grid.",
               caption: "",
+              renderData: JSON.stringify({
+                xMin: -5,
+                xMax: 5,
+                yMin: -5,
+                yMax: 5,
+              }),
             },
           },
         ],
@@ -140,5 +162,11 @@ test("visual plans survive the normal paper version persistence flow", () => {
   assert.equal(reloaded.visual.id, "figure-1");
   assert.equal(reloaded.visual.status, "planned");
   assert.equal(reloaded.visual.type, "coordinate_grid");
+  assert.deepEqual(JSON.parse(reloaded.visual.renderData), {
+    xMin: -5,
+    xMax: 5,
+    yMin: -5,
+    yMax: 5,
+  });
   db.close();
 });
