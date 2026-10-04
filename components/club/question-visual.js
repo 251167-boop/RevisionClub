@@ -1056,6 +1056,85 @@ function FlowFigure({ model }) {
         </text>
       </svg>
     );
+  if (
+    [
+      "decision_tree",
+      "relationship_diagram",
+      "dynasty_relationship",
+      "political_structure",
+      "social_hierarchy",
+      "government_structure",
+      "concept_map",
+      "family_tree",
+    ].includes(model.type)
+  ) {
+    const root = items[0] || "Central idea",
+      children = items.slice(1, 4),
+      childXs = [130, 260, 390];
+    return (
+      <svg viewBox="0 0 520 280" role="img" aria-label={model.altText}>
+        <text x="260" y="24" textAnchor="middle" className="figure-title">
+          {model.title}
+        </text>
+        <rect
+          x="200"
+          y="50"
+          width="120"
+          height="44"
+          rx="8"
+          fill={pale}
+          stroke={ink}
+        />
+        <text x="260" y="77" textAnchor="middle" fontSize="11">
+          {root}
+        </text>
+        {children.map((item, index) => (
+          <g key={item}>
+            <path
+              d={`M260 94 V125 H${childXs[index]} V158`}
+              fill="none"
+              stroke={ink}
+            />
+            <rect
+              x={childXs[index] - 55}
+              y="158"
+              width="110"
+              height="44"
+              rx="7"
+              fill="#fff"
+              stroke={ink}
+            />
+            <text x={childXs[index]} y="184" textAnchor="middle" fontSize="10">
+              {item}
+            </text>
+          </g>
+        ))}
+        {items.slice(4, 6).map((item, index) => (
+          <g key={item}>
+            <line
+              x1={childXs[index]}
+              y1="202"
+              x2={childXs[index]}
+              y2="225"
+              stroke={ink}
+            />
+            <rect
+              x={childXs[index] - 48}
+              y="225"
+              width="96"
+              height="34"
+              rx="6"
+              fill={pale}
+              stroke={muted}
+            />
+            <text x={childXs[index]} y="246" textAnchor="middle" fontSize="9">
+              {item}
+            </text>
+          </g>
+        ))}
+      </svg>
+    );
+  }
   return (
     <svg viewBox="0 0 520 270" role="img" aria-label={model.altText}>
       <ArrowMarker />
@@ -1110,11 +1189,693 @@ function FlowFigure({ model }) {
     </svg>
   );
 }
+
+function HistoryFigure({ model }) {
+  const items = (
+      model.labels.length
+        ? model.labels
+        : ["Event 1", "Event 2", "Event 3", "Event 4"]
+    ).slice(0, 6),
+    values = model.values;
+  return (
+    <svg viewBox="0 0 520 270" role="img" aria-label={model.altText}>
+      <ArrowMarker />
+      <text x="260" y="24" textAnchor="middle" className="figure-title">
+        {model.title}
+      </text>
+      <line
+        x1="55"
+        y1="135"
+        x2="475"
+        y2="135"
+        stroke={ink}
+        strokeWidth="2"
+        markerEnd="url(#figure-arrow)"
+      />
+      {items.map((item, index) => {
+        const x = 75 + index * (370 / Math.max(1, items.length - 1)),
+          above = index % 2 === 0;
+        return (
+          <g key={`${item}-${index}`}>
+            <circle cx={x} cy="135" r="6" fill={index % 2 ? accent : ink} />
+            <line x1={x} y1="135" x2={x} y2={above ? 92 : 178} stroke={muted} />
+            <text x={x} y={above ? 76 : 202} textAnchor="middle" fontSize="10">
+              {item}
+            </text>
+            {values[index] !== undefined && (
+              <text
+                x={x}
+                y={above ? 91 : 217}
+                textAnchor="middle"
+                fontSize="9"
+                fill={muted}
+              >
+                {values[index]}
+              </text>
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function EconomicsFigure({ model }) {
+  if (model.type !== "supply_demand_graph")
+    return model.values.length ? (
+      <ChartFigure model={model} />
+    ) : (
+      <svg viewBox="0 0 520 260" role="img" aria-label={model.altText}>
+        <EmptySpecification model={model} />
+      </svg>
+    );
+  return (
+    <svg viewBox="0 0 520 280" role="img" aria-label={model.altText}>
+      <ArrowMarker />
+      <text x="260" y="24" textAnchor="middle" className="figure-title">
+        {model.title}
+      </text>
+      <line
+        x1="75"
+        y1="230"
+        x2="470"
+        y2="230"
+        stroke={ink}
+        strokeWidth="2"
+        markerEnd="url(#figure-arrow)"
+      />
+      <line
+        x1="75"
+        y1="230"
+        x2="75"
+        y2="45"
+        stroke={ink}
+        strokeWidth="2"
+        markerEnd="url(#figure-arrow)"
+      />
+      <line
+        x1="115"
+        y1="205"
+        x2="415"
+        y2="70"
+        stroke="#527461"
+        strokeWidth="3"
+      />
+      <line
+        x1="115"
+        y1="70"
+        x2="415"
+        y2="205"
+        stroke="#9b7457"
+        strokeWidth="3"
+      />
+      <circle cx="265" cy="137.5" r="5" fill={ink} />
+      <line
+        x1="265"
+        y1="137.5"
+        x2="265"
+        y2="230"
+        stroke={muted}
+        strokeDasharray="5 4"
+      />
+      <line
+        x1="75"
+        y1="137.5"
+        x2="265"
+        y2="137.5"
+        stroke={muted}
+        strokeDasharray="5 4"
+      />
+      <text x="420" y="70" fontSize="12">
+        S
+      </text>
+      <text x="420" y="208" fontSize="12">
+        D
+      </text>
+      <text x="272" y="130" fontSize="10">
+        E
+      </text>
+      <text x="460" y="250" fontSize="11">
+        {model.xLabel === "x" ? "Quantity" : model.xLabel}
+      </text>
+      <text x="40" y="50" fontSize="11">
+        {model.yLabel === "y" ? "Price" : model.yLabel}
+      </text>
+    </svg>
+  );
+}
+
+function IctFigure({ model }) {
+  const items = (
+    model.labels.length ? model.labels : ["Input", "Process", "Output"]
+  ).slice(0, 6);
+  if (model.type === "ui_mockup")
+    return (
+      <svg viewBox="0 0 520 280" role="img" aria-label={model.altText}>
+        <text x="260" y="24" textAnchor="middle" className="figure-title">
+          {model.title}
+        </text>
+        <rect
+          x="65"
+          y="42"
+          width="390"
+          height="205"
+          rx="7"
+          fill="#fff"
+          stroke={ink}
+          strokeWidth="2"
+        />
+        <rect
+          x="65"
+          y="42"
+          width="390"
+          height="30"
+          rx="7"
+          fill={pale}
+          stroke={ink}
+        />
+        {[82, 96, 110].map((x) => (
+          <circle key={x} cx={x} cy="57" r="4" fill={accent} />
+        ))}
+        <rect
+          x="85"
+          y="92"
+          width="95"
+          height="130"
+          fill={pale}
+          stroke={muted}
+        />
+        <rect
+          x="200"
+          y="92"
+          width="230"
+          height="48"
+          fill="#fff"
+          stroke={muted}
+        />
+        <rect
+          x="200"
+          y="157"
+          width="108"
+          height="65"
+          fill="#fff"
+          stroke={muted}
+        />
+        <rect
+          x="322"
+          y="157"
+          width="108"
+          height="65"
+          fill="#fff"
+          stroke={muted}
+        />
+      </svg>
+    );
+  if (model.type === "database_relationship")
+    return (
+      <svg viewBox="0 0 520 280" role="img" aria-label={model.altText}>
+        <text x="260" y="24" textAnchor="middle" className="figure-title">
+          {model.title}
+        </text>
+        {[125, 395].map((x, index) => (
+          <g key={x}>
+            <rect
+              x={x - 75}
+              y="70"
+              width="150"
+              height="145"
+              fill="#fff"
+              stroke={ink}
+            />
+            <rect
+              x={x - 75}
+              y="70"
+              width="150"
+              height="34"
+              fill={pale}
+              stroke={ink}
+            />
+            <text
+              x={x}
+              y="91"
+              textAnchor="middle"
+              fontSize="11"
+              fontWeight="700"
+            >
+              {items[index] || `Entity ${index + 1}`}
+            </text>
+            {[125, 153, 181].map((y, row) => (
+              <line
+                key={y}
+                x1={x - 75}
+                y1={y}
+                x2={x + 75}
+                y2={y}
+                stroke={muted}
+              />
+            ))}
+          </g>
+        ))}
+        <line
+          x1="200"
+          y1="143"
+          x2="320"
+          y2="143"
+          stroke={ink}
+          strokeWidth="2"
+        />
+        <text x="215" y="136" fontSize="12">
+          1
+        </text>
+        <text x="300" y="136" fontSize="12">
+          ∞
+        </text>
+      </svg>
+    );
+  if (model.type === "binary_data")
+    return (
+      <svg viewBox="0 0 520 240" role="img" aria-label={model.altText}>
+        <text x="260" y="24" textAnchor="middle" className="figure-title">
+          {model.title}
+        </text>
+        {Array.from({ length: 16 }, (_, index) => (
+          <g key={index}>
+            <rect
+              x={48 + (index % 8) * 53}
+              y={65 + Math.floor(index / 8) * 72}
+              width="42"
+              height="48"
+              rx="5"
+              fill={index % 3 ? pale : "#fff"}
+              stroke={ink}
+            />
+            <text
+              x={69 + (index % 8) * 53}
+              y={96 + Math.floor(index / 8) * 72}
+              textAnchor="middle"
+              fontSize="17"
+            >
+              {index % 3 ? "1" : "0"}
+            </text>
+          </g>
+        ))}
+      </svg>
+    );
+  if (model.type === "logic_diagram")
+    return (
+      <svg viewBox="0 0 520 250" role="img" aria-label={model.altText}>
+        <text x="260" y="24" textAnchor="middle" className="figure-title">
+          {model.title}
+        </text>
+        <line x1="65" y1="90" x2="180" y2="90" stroke={ink} strokeWidth="2" />
+        <line x1="65" y1="160" x2="180" y2="160" stroke={ink} strokeWidth="2" />
+        <path
+          d="M180 65 H240 C315 65 315 185 240 185 H180 Z"
+          fill={pale}
+          stroke={ink}
+          strokeWidth="2"
+        />
+        <line
+          x1="292"
+          y1="125"
+          x2="440"
+          y2="125"
+          stroke={ink}
+          strokeWidth="2"
+        />
+        <text x="55" y="94" textAnchor="end" fontSize="11">
+          {items[0] || "A"}
+        </text>
+        <text x="55" y="164" textAnchor="end" fontSize="11">
+          {items[1] || "B"}
+        </text>
+        <text x="450" y="129" fontSize="11">
+          {items[2] || "Q"}
+        </text>
+      </svg>
+    );
+  const network = [
+      "network_diagram",
+      "cybersecurity_network",
+      "system_diagram",
+    ].includes(model.type),
+    positions = [
+      [260, 62],
+      [115, 145],
+      [260, 145],
+      [405, 145],
+      [185, 225],
+      [335, 225],
+    ];
+  return (
+    <svg viewBox="0 0 520 280" role="img" aria-label={model.altText}>
+      <ArrowMarker />
+      <text x="260" y="24" textAnchor="middle" className="figure-title">
+        {model.title}
+      </text>
+      {positions.slice(1, items.length).map(([x, y], index) => (
+        <line
+          key={`${x}-${y}`}
+          x1="260"
+          y1="82"
+          x2={x}
+          y2={y - 20}
+          stroke={muted}
+          markerEnd={network ? undefined : "url(#figure-arrow)"}
+        />
+      ))}
+      {items.map((item, index) => {
+        const [x, y] = positions[index] || positions.at(-1);
+        return (
+          <g key={`${item}-${index}`}>
+            <rect
+              x={x - 54}
+              y={y - 20}
+              width="108"
+              height="40"
+              rx={network ? 20 : 5}
+              fill={index ? "#fff" : pale}
+              stroke={ink}
+            />
+            <text x={x} y={y + 4} textAnchor="middle" fontSize="10">
+              {item}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function noteY(note, index) {
+  const order = [
+    "C4",
+    "D4",
+    "E4",
+    "F4",
+    "G4",
+    "A4",
+    "B4",
+    "C5",
+    "D5",
+    "E5",
+    "F5",
+  ];
+  const position = order.indexOf(String(note || "").toUpperCase());
+  return 178 - (position >= 0 ? position : index % 9) * 8;
+}
+function MusicFigure({ model }) {
+  const items = (
+    model.labels.length ? model.labels : ["C4", "D4", "E4", "F4", "G4"]
+  ).slice(0, 12);
+  if (model.type === "keyboard_diagram")
+    return (
+      <svg viewBox="0 0 520 240" role="img" aria-label={model.altText}>
+        <text x="260" y="24" textAnchor="middle" className="figure-title">
+          {model.title}
+        </text>
+        {Array.from({ length: 10 }, (_, index) => (
+          <rect
+            key={index}
+            x={35 + index * 45}
+            y="55"
+            width="45"
+            height="145"
+            fill="#fff"
+            stroke={ink}
+          />
+        ))}
+        {[0, 1, 3, 4, 5, 7, 8].map((index) => (
+          <rect
+            key={index}
+            x={66 + index * 45}
+            y="55"
+            width="28"
+            height="88"
+            fill={ink}
+          />
+        ))}
+        {items.slice(0, 10).map((item, index) => (
+          <text
+            key={`${item}-${index}`}
+            x={57 + index * 45}
+            y="220"
+            textAnchor="middle"
+            fontSize="9"
+          >
+            {item}
+          </text>
+        ))}
+      </svg>
+    );
+  if (model.type === "instrument_family")
+    return <FlowFigure model={{ ...model, type: "relationship_diagram" }} />;
+  if (model.type === "chord_diagram")
+    return (
+      <svg viewBox="0 0 520 270" role="img" aria-label={model.altText}>
+        <text x="260" y="24" textAnchor="middle" className="figure-title">
+          {model.title}
+        </text>
+        {Array.from({ length: 6 }, (_, index) => (
+          <line
+            key={`v${index}`}
+            x1={175 + index * 34}
+            y1="55"
+            x2={175 + index * 34}
+            y2="225"
+            stroke={ink}
+            strokeWidth={index === 0 ? 4 : 1}
+          />
+        ))}
+        {Array.from({ length: 6 }, (_, index) => (
+          <line
+            key={`h${index}`}
+            x1="175"
+            y1={55 + index * 34}
+            x2="345"
+            y2={55 + index * 34}
+            stroke={ink}
+          />
+        ))}
+        {[0, 2, 4].map((stringIndex, index) => (
+          <circle
+            key={stringIndex}
+            cx={175 + stringIndex * 34}
+            cy={72 + (index + 1) * 34}
+            r="9"
+            fill={ink}
+          />
+        ))}
+      </svg>
+    );
+  if (model.type === "rests")
+    return (
+      <svg viewBox="0 0 520 250" role="img" aria-label={model.altText}>
+        <text x="260" y="24" textAnchor="middle" className="figure-title">
+          {model.title}
+        </text>
+        {Array.from({ length: 5 }, (_, index) => (
+          <line
+            key={index}
+            x1="55"
+            y1={85 + index * 18}
+            x2="475"
+            y2={85 + index * 18}
+            stroke={ink}
+          />
+        ))}
+        {items.map((item, index) => (
+          <g key={`${item}-${index}`}>
+            <text
+              x={125 + index * (290 / Math.max(1, items.length - 1))}
+              y="150"
+              textAnchor="middle"
+              fontFamily="serif"
+              fontSize="40"
+            >
+              𝄽
+            </text>
+            <text
+              x={125 + index * (290 / Math.max(1, items.length - 1))}
+              y="210"
+              textAnchor="middle"
+              fontSize="9"
+            >
+              {item}
+            </text>
+          </g>
+        ))}
+      </svg>
+    );
+  return (
+    <svg viewBox="0 0 520 260" role="img" aria-label={model.altText}>
+      <text x="260" y="24" textAnchor="middle" className="figure-title">
+        {model.title}
+      </text>
+      {Array.from({ length: 5 }, (_, index) => (
+        <line
+          key={index}
+          x1="55"
+          y1={100 + index * 16}
+          x2="475"
+          y2={100 + index * 16}
+          stroke={ink}
+        />
+      ))}
+      <text x="65" y="169" fontSize="75" fontFamily="serif">
+        {model.type === "bass_clef" ? "𝄢" : "𝄞"}
+      </text>
+      {model.type === "time_signature" && (
+        <g fontSize="26" fontWeight="700">
+          <text x="145" y="126">
+            4
+          </text>
+          <text x="145" y="157">
+            4
+          </text>
+        </g>
+      )}
+      {items.map((item, index) => {
+        const x = 155 + index * (290 / Math.max(1, items.length));
+        return (
+          <g key={`${item}-${index}`}>
+            <ellipse
+              cx={x}
+              cy={noteY(item, index)}
+              rx="8"
+              ry="6"
+              transform={`rotate(-18 ${x} ${noteY(item, index)})`}
+              fill={ink}
+            />
+            <line
+              x1={x + 7}
+              y1={noteY(item, index)}
+              x2={x + 7}
+              y2={noteY(item, index) - 38}
+              stroke={ink}
+              strokeWidth="2"
+            />
+            {model.type === "note_identification" && (
+              <text x={x} y="215" textAnchor="middle" fontSize="10">
+                {index + 1}
+              </text>
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function ReligiousFigure({ model }) {
+  const items = model.labels;
+  if (model.type === "place_of_worship")
+    return (
+      <svg viewBox="0 0 520 270" role="img" aria-label={model.altText}>
+        <text x="260" y="24" textAnchor="middle" className="figure-title">
+          {model.title}
+        </text>
+        <path
+          d="M110 225 H410 V110 L260 52 L110 110 Z"
+          fill={pale}
+          stroke={ink}
+          strokeWidth="2"
+        />
+        <rect
+          x="225"
+          y="155"
+          width="70"
+          height="70"
+          rx="35"
+          fill="#fff"
+          stroke={ink}
+        />
+        {[155, 365].map((x, index) => (
+          <g key={x}>
+            <rect
+              x={x - 23}
+              y="128"
+              width="46"
+              height="45"
+              fill="#fff"
+              stroke={muted}
+            />
+            <text x={x} y="195" textAnchor="middle" fontSize="9">
+              {items[index] || `Area ${index + 1}`}
+            </text>
+          </g>
+        ))}
+      </svg>
+    );
+  return (
+    <svg viewBox="0 0 520 260" role="img" aria-label={model.altText}>
+      <text x="260" y="24" textAnchor="middle" className="figure-title">
+        {model.title}
+      </text>
+      <circle
+        cx="260"
+        cy="135"
+        r="88"
+        fill={pale}
+        stroke={ink}
+        strokeWidth="2"
+      />
+      <rect
+        x="218"
+        y="88"
+        width="84"
+        height="94"
+        rx="24"
+        fill="#fff"
+        stroke={ink}
+      />
+      <line x1="235" y1="112" x2="285" y2="112" stroke={muted} />
+      <line x1="235" y1="128" x2="285" y2="128" stroke={muted} />
+      <text x="260" y="140" textAnchor="middle" fontSize="11">
+        {items[0] || "Symbol"}
+      </text>
+    </svg>
+  );
+}
+
+function PlaceholderFigure({ model, strategy }) {
+  const source = strategy === "source_image";
+  return (
+    <svg viewBox="0 0 520 260" role="img" aria-label={model.altText}>
+      <rect
+        x="55"
+        y="35"
+        width="410"
+        height="180"
+        rx="8"
+        fill="#fafbf7"
+        stroke={ink}
+        strokeWidth="1.5"
+        strokeDasharray="7 5"
+      />
+      <path
+        d="M180 175 L235 112 L275 150 L315 102 L390 175 Z"
+        fill={pale}
+        stroke={accent}
+      />
+      <circle cx="175" cy="90" r="18" fill="#d7dfc9" />
+      <text x="260" y="235" textAnchor="middle" fontSize="11" fill={muted}>
+        {source
+          ? "Source image to be supplied"
+          : "Illustration reserved for Step 3"}
+      </text>
+    </svg>
+  );
+}
 export function QuestionVisual({ visual }) {
   const model = buildVisualModel(visual);
-  if (!model || visual.strategy !== "deterministic") return null;
+  if (!model) return null;
   let graphic;
-  if (model.family === "cartesian") graphic = <CartesianFigure model={model} />;
+  if (model.family === "placeholder")
+    graphic = <PlaceholderFigure model={model} strategy={visual.strategy} />;
+  else if (visual.strategy !== "deterministic") return null;
+  else if (model.family === "cartesian")
+    graphic = <CartesianFigure model={model} />;
   else if (model.family === "chart") graphic = <ChartFigure model={model} />;
   else if (model.family === "geometry")
     graphic = <GeometryFigure model={model} />;
@@ -1123,6 +1884,14 @@ export function QuestionVisual({ visual }) {
   else if (model.family === "science")
     graphic = <ScienceFigure model={model} />;
   else if (model.family === "map") graphic = <MapFigure model={model} />;
+  else if (model.family === "history")
+    graphic = <HistoryFigure model={model} />;
+  else if (model.family === "economics")
+    graphic = <EconomicsFigure model={model} />;
+  else if (model.family === "ict") graphic = <IctFigure model={model} />;
+  else if (model.family === "music") graphic = <MusicFigure model={model} />;
+  else if (model.family === "religious")
+    graphic = <ReligiousFigure model={model} />;
   else graphic = <FlowFigure model={model} />;
   return (
     <figure

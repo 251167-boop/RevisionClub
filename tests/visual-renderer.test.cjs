@@ -15,14 +15,8 @@ test("requested subject figures map to deterministic renderer families", () => {
   assert.equal(visualFamily("drainage_basin"), "map");
 });
 
-test("all deterministic types for the first five subjects have renderers", () => {
-  for (const subject of [
-    "Chinese",
-    "English",
-    "Maths",
-    "Integrated Science",
-    "Geography",
-  ]) {
+test("all deterministic types across the official subject list have renderers", () => {
+  for (const subject of Object.keys(SUBJECT_VISUAL_POLICIES)) {
     for (const item of SUBJECT_VISUAL_POLICIES[subject].deterministic)
       assert.ok(
         SUPPORTED_OUTLINE_TYPES.has(item.type),
@@ -31,14 +25,21 @@ test("all deterministic types for the first five subjects have renderers", () =>
   }
 });
 
-test("later-subject specialist visuals stay hidden until their renderer exists", () => {
+test("remaining subjects use dedicated renderer families and source placeholders", () => {
+  assert.equal(visualFamily("dynastic_timeline"), "history");
+  assert.equal(visualFamily("supply_demand_graph"), "economics");
+  assert.equal(visualFamily("network_diagram"), "ict");
+  assert.equal(visualFamily("musical_staff"), "music");
+  assert.equal(visualFamily("place_of_worship"), "religious");
+  assert.equal(visualFamily("historical_source_image"), "placeholder");
   assert.equal(
     buildVisualModel({
       type: "musical_staff",
       description: "A C-major scale.",
       altText: "Music notation.",
-    }),
-    null,
+      renderData: JSON.stringify({ labels: ["C4", "D4", "E4"] }),
+    }).labels.join(","),
+    "C4,D4,E4",
   );
 });
 

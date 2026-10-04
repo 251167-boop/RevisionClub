@@ -1268,7 +1268,7 @@ function QuestionEditorCard({
                   onChange={(event) => onQuestion("topic", event.target.value)}
                 />
               </label>
-              {q.visual?.strategy === "deterministic" && (
+              {q.visual && q.visual.strategy !== "none" && (
                 <fieldset className="figure-settings">
                   <legend>Figure</legend>
                   <label>
@@ -1308,23 +1308,25 @@ function QuestionEditorCard({
                       }
                     />
                   </label>
-                  <details className="figure-data-details">
-                    <summary>Advanced figure data</summary>
-                    <label>
-                      Plot data and labels (JSON)
-                      <textarea
-                        rows={4}
-                        spellCheck="false"
-                        value={q.visual.renderData || "{}"}
-                        onChange={(event) =>
-                          onQuestion("visual", {
-                            ...q.visual,
-                            renderData: event.target.value,
-                          })
-                        }
-                      />
-                    </label>
-                  </details>
+                  {q.visual.strategy === "deterministic" && (
+                    <details className="figure-data-details">
+                      <summary>Advanced figure data</summary>
+                      <label>
+                        Plot data and labels (JSON)
+                        <textarea
+                          rows={4}
+                          spellCheck="false"
+                          value={q.visual.renderData || "{}"}
+                          onChange={(event) =>
+                            onQuestion("visual", {
+                              ...q.visual,
+                              renderData: event.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                    </details>
+                  )}
                 </fieldset>
               )}
               {["short_answer", "answer_space", "comprehension"].includes(
