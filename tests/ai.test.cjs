@@ -93,14 +93,33 @@ test("AI generation enforces sources and validates structured responses", async 
   global.fetch = async (url, opts) => {
     const b = JSON.parse(opts.body);
     assert.ok(b.systemInstruction.parts[0].text.includes("Source-only"));
+    const generationRequest = JSON.parse(b.contents[0].parts[0].text);
+    assert.equal(generationRequest.visualPolicy.subject, "Integrated Science");
     return response({
       ...content,
       title: "Water cycle",
+      questions: content.questions.map((question) => ({
+        ...question,
+        visual: {
+          needed: true,
+          strategy: "deterministic",
+          type: "scientific_cycle",
+          description:
+            "A labelled water-cycle diagram showing evaporation, condensation and precipitation.",
+          altText: "The water cycle with its three main labelled stages.",
+          caption: "The water cycle",
+        },
+      })),
       answerKey: key.content,
     });
   };
   const paper = await generatePaper(
-    { onlySources: true, questionCount: 1, totalMarks: 2 },
+    {
+      subject: "Integrated Science",
+      onlySources: true,
+      questionCount: 1,
+      totalMarks: 2,
+    },
     [
       {
         name: "notes.txt",
@@ -111,8 +130,14 @@ test("AI generation enforces sources and validates structured responses", async 
   );
   assert.equal(paper.questions.length, 1);
   assert.equal(paper.answerKey.length, 1);
+  assert.equal(paper.questions[0].visual.status, "planned");
+  assert.equal(paper.questions[0].visual.id, "figure-1");
   await assert.rejects(
-    () => generatePaper({ questionCount: 2 }, []),
+    () =>
+      generatePaper(
+        { subject: "Integrated Science", questionCount: 2 },
+        [],
+      ),
     (error) =>
       /question count/.test(error.message) &&
       error.publicCode === "AI_INVALID_RESPONSE" &&
