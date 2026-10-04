@@ -6,10 +6,14 @@ import { mysqlPool } from "@/lib/mysql";
 import { mysqlDashboard } from "@/lib/club/mysql-dashboard";
 import {
   deleteMysqlVersionDraft,
+  mysqlFileUsage,
   mysqlFiles,
   mysqlPaperDraft,
+  mysqlVisualAsset,
+  mysqlVisualAssetPaperIds,
   mysqlVersionDraft,
   mysqlVersionEditContext,
+  saveMysqlFile,
   saveMysqlPaperDraft,
   saveMysqlVersionDraft,
 } from "@/lib/club/mysql-drafts";
@@ -22,8 +26,11 @@ import {
   markPaper,
   aiAvailable,
 } from "@/lib/club/ai.mjs";
+import { generateQuestionImage } from "@/lib/club/image-generation.mjs";
+import visualPolicy from "@/lib/club/visual-policy.cjs";
 import { randomUUID } from "node:crypto";
 import games from "@/lib/club/games.cjs";
+const { validateVisualPlan } = visualPolicy;
 export const dynamic = "force-dynamic";
 let mysqlServiceInstance;
 function mysqlService() {
@@ -40,6 +47,12 @@ async function ownedFiles(userId, ids) {
   const files = await mysqlFiles(userId, uniqueIds);
   if (files.length !== uniqueIds.length) throw new Error("File access denied.");
   return files;
+}
+function visualAssetIds(content) {
+  return (content?.questions || [])
+    .map((question) => question.visual?.assetId)
+    .filter(Boolean)
+    .map(String);
 }
 const throttle = globalThis.__clubThrottle || new Map();
 globalThis.__clubThrottle = throttle;
@@ -67,6 +80,30 @@ export async function GET(request, props) {
       [resource, key] = params.path;
     let data;
     const q = new URL(request.url).searchParams;
+    if (resource === "visual-asset") {
+      const asset = await mysqlVisualAsset(key);
+      if (!asset)
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+      let allowed = Number(asset.owner_id) === Number(uid);
+      if (!allowed) {
+        const paperIds = await mysqlVisualAssetPaperIds(key);
+        for (const paperId of paperIds) {
+          try {
+            mysqlService().paper(uid, paperId);
+            allowed = true;
+            break;
+          } catch {}
+        }
+      }
+      if (!allowed) throw new Error("Figure access denied.");
+      return new NextResponse(Buffer.from(asset.content), {
+        headers: {
+          "Content-Type": asset.mime,
+          "Cache-Control": "private, max-age=31536000, immutable",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    }
     if (resource === "dashboard")
       data = { ...(await mysqlDashboard(uid)), user, ai: aiAvailable() };
     else if (resource === "papers") {
@@ -187,6 +224,49 @@ export async function POST(request, props) {
         keySource: "AI-generated marking scheme",
       };
       await saveMysqlVersionDraft(uid, key, draft);
+    } else if (resource === "generate-image") {
+      rate(uid, "image");
+      rules.validSubject(b.subject);
+      const visual = validateVisualPlan(b.visual, b.subject, b.questionId);
+      if (!visual || visual.strategy !== "generated_image")
+        throw new Error(
+          "This question is not configured for AI image generation.",
+        );
+      const generated = await generateQuestionImage({
+        subject: b.subject,
+        questionText: b.questionText,
+        visual,
+      });
+      const id = randomUUID();
+      const extension =
+        generated.mime === "image/jpeg"
+          ? "jpg"
+          : generated.mime === "image/webp"
+            ? "webp"
+            : "png";
+      const totalUsage = await mysqlFileUsage(uid);
+      if (totalUsage + generated.buffer.length > 100 * 1024 * 1024)
+        throw new Error("Upload allowance of 100 MB reached.");
+      await saveMysqlFile({
+        id,
+        owner_id: uid,
+        name: `question-${String(b.questionId || "figure").slice(0, 30)}.${extension}`,
+        purpose: "Generated Figure",
+        mime: generated.mime,
+        content: generated.buffer,
+        extracted: "",
+        created_at: new Date().toISOString(),
+      });
+      data = validateVisualPlan(
+        {
+          ...visual,
+          assetId: id,
+          assetMime: generated.mime,
+          generatedAt: new Date().toISOString(),
+        },
+        b.subject,
+        b.questionId,
+      );
     } else if (resource === "version-draft")
       data = await saveMysqlVersionDraft(uid, key, b);
     else if (resource === "generate" || resource === "regenerate") {
@@ -220,10 +300,22 @@ export async function POST(request, props) {
     } else if (resource === "paper-draft")
       data = await saveMysqlPaperDraft(uid, b.groupId || "", b.draft);
     else if (resource === "papers") {
-      await ownedFiles(uid, b.fileIds || []);
+      const previousFiles = b.sourceVersionId
+        ? (await mysqlVersionEditContext(uid, b.sourceVersionId)).files.map(
+            (file) => String(file.id),
+          )
+        : [];
+      const fileIds = [
+        ...new Set([
+          ...(b.fileIds || []).map(String),
+          ...previousFiles,
+          ...visualAssetIds(b.content),
+        ]),
+      ];
+      await ownedFiles(uid, fileIds);
       data = svc.savePaper(
         uid,
-        b,
+        { ...b, fileIds },
         b.content,
         b.answerKey,
         b.keySource || "Human-provided answer key",

@@ -138,10 +138,7 @@ test("AI generation enforces sources and validates structured responses", async 
   assert.equal(paper.questions[0].visual.id, "figure-1");
   await assert.rejects(
     () =>
-      generatePaper(
-        { subject: "Integrated Science", questionCount: 2 },
-        [],
-      ),
+      generatePaper({ subject: "Integrated Science", questionCount: 2 }, []),
     (error) =>
       /question count/.test(error.message) &&
       error.publicCode === "AI_INVALID_RESPONSE" &&
@@ -598,6 +595,84 @@ test("OpenRouter automatically backs up Gemini with strict structured output", a
       error.providerFailures[1].provider === "OpenRouter",
   );
   assert.equal(requests.length, 4);
+});
+
+test("OpenRouter retries text requests without strict schema when the free router rejects it", async (t) => {
+  const oldGemini = process.env.GEMINI_API_KEY,
+    oldOpenRouter = process.env.OPENROUTER_API_KEY,
+    oldFetch = global.fetch;
+  delete process.env.GEMINI_API_KEY;
+  process.env.OPENROUTER_API_KEY = "synthetic-openrouter-key";
+  t.after(() => {
+    global.fetch = oldFetch;
+    if (oldGemini === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = oldGemini;
+    if (oldOpenRouter === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = oldOpenRouter;
+  });
+  let calls = 0;
+  global.fetch = async (_url, options) => {
+    calls++;
+    const body = JSON.parse(options.body);
+    if (calls === 1) {
+      assert.equal(body.response_format.type, "json_schema");
+      assert.equal(body.provider.require_parameters, true);
+      return providerFailure(
+        400,
+        "INVALID_REQUEST",
+        "No endpoints found that support the requested parameters",
+      );
+    }
+    assert.equal(body.response_format, undefined);
+    assert.equal(body.provider, undefined);
+    assert.match(body.messages[0].content, /Return only one valid JSON object/);
+    return openRouterResponse({
+      ...content,
+      title: "Compatibility fallback paper",
+      answerKey: key.content,
+      sourceWarnings: [],
+      error: "",
+    });
+  };
+  const { generatePaper } = await import("../lib/club/ai.mjs");
+  const paper = await generatePaper(
+    { questionCount: 1, totalMarks: 2, duration: 30 },
+    [],
+  );
+  assert.equal(paper.title, "Compatibility fallback paper");
+  assert.equal(calls, 2);
+});
+
+test("OpenRouter reports incompatible binary sources instead of a generic rejection", async (t) => {
+  const oldGemini = process.env.GEMINI_API_KEY,
+    oldOpenRouter = process.env.OPENROUTER_API_KEY,
+    oldFetch = global.fetch;
+  delete process.env.GEMINI_API_KEY;
+  process.env.OPENROUTER_API_KEY = "synthetic-openrouter-key";
+  t.after(() => {
+    global.fetch = oldFetch;
+    if (oldGemini === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = oldGemini;
+    if (oldOpenRouter === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = oldOpenRouter;
+  });
+  global.fetch = async () =>
+    providerFailure(400, "INVALID_REQUEST", "Request cannot be routed");
+  const { generatePaper } = await import("../lib/club/ai.mjs");
+  await assert.rejects(
+    () =>
+      generatePaper({ questionCount: 1, totalMarks: 2, duration: 30 }, [
+        {
+          name: "diagram.png",
+          purpose: "Revision Material",
+          mime: "image/png",
+          content: Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+        },
+      ]),
+    (error) =>
+      error.publicCode === "AI_FALLBACK_FILE_UNSUPPORTED" &&
+      /Retry Gemini or use extracted text/.test(error.message),
+  );
 });
 
 test("OpenRouter retries a structurally valid but unusable paper once", async (t) => {

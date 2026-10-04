@@ -1868,7 +1868,39 @@ function PlaceholderFigure({ model, strategy }) {
   );
 }
 export function QuestionVisual({ visual }) {
+  if (visual?.assetId)
+    return (
+      <figure
+        className="question-visual visual-image"
+        data-visual-type={visual.type}
+      >
+        {/* Stored paper assets use an authenticated route and must remain plain images for print/export cloning. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          className="question-generated-image"
+          data-asset-id={visual.assetId}
+          src={`/api/club/visual-asset/${encodeURIComponent(visual.assetId)}`}
+          alt={visual.altText || visual.description || "Question illustration"}
+        />
+        {visual.caption && <figcaption>{visual.caption}</figcaption>}
+      </figure>
+    );
   const model = buildVisualModel(visual);
+  if (!model && ["generated_image", "source_image"].includes(visual?.strategy))
+    return (
+      <figure
+        className="question-visual visual-placeholder"
+        data-visual-type={visual.type}
+      >
+        <PlaceholderFigure
+          strategy={visual.strategy}
+          model={{
+            altText: visual.altText || visual.description || "Planned figure",
+          }}
+        />
+        {visual.caption && <figcaption>{visual.caption}</figcaption>}
+      </figure>
+    );
   if (!model) return null;
   let graphic;
   if (model.family === "placeholder")

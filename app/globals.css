@@ -1324,6 +1324,15 @@ button.stat-card:hover {
   overflow: visible;
   font-family: var(--font);
 }
+.question-generated-image {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 520px;
+  margin: 0 auto;
+  object-fit: contain;
+  border-radius: 8px;
+}
 .question-visual .figure-title {
   fill: #263c30;
   font: 700 14px var(--font);
@@ -1971,6 +1980,16 @@ button.mc-option[aria-pressed="true"] {
 .figure-settings .figure-instructions-field,
 .figure-settings .figure-data-details {
   grid-column: 1 / -1;
+}
+.figure-asset-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.figure-asset-actions .button {
+  margin: 0;
+  cursor: pointer;
 }
 .figure-data-details summary {
   margin: 0 0 9px !important;
@@ -3618,6 +3637,10 @@ button.mc-option[aria-pressed="true"] {
   }
   .question-visual {
     max-width: 155mm;
+  }
+  .question-generated-image {
+    max-height: 120mm;
+    border-radius: 0;
   }
   .answer-lines > div {
     min-height: var(--answer-line-spacing, 7mm);

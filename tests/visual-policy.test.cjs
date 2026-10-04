@@ -4,6 +4,7 @@ const { test } = require("node:test"),
   {
     SUBJECT_VISUAL_POLICIES,
     subjectVisualPolicy,
+    validateVisualPlan,
   } = require("../lib/club/visual-policy.cjs"),
   { openDatabase } = require("../lib/club/database.cjs"),
   { service } = require("../lib/club/service.cjs");
@@ -113,6 +114,37 @@ test("subject policy rejects unsuitable and misleading visual workflows", () => 
         "Maths",
       ),
     /valid JSON object/,
+  );
+});
+
+test("validated image plans preserve safe stored asset references", () => {
+  const visual = validateVisualPlan(
+    {
+      strategy: "generated_image",
+      type: "picture_writing_prompt",
+      description: "A child finding a lost umbrella at a bus stop.",
+      altText: "A child notices an umbrella beside a bus-stop bench.",
+      assetId: "2aa0fb0d-2e83-41b2-84bf-24a42fde804c",
+      assetMime: "image/png",
+      generatedAt: "2026-10-04T10:00:00.000Z",
+    },
+    "English",
+    "3",
+  );
+  assert.equal(visual.assetId, "2aa0fb0d-2e83-41b2-84bf-24a42fde804c");
+  assert.equal(visual.assetMime, "image/png");
+  assert.equal(visual.status, "ready");
+  assert.throws(
+    () =>
+      validateVisualPlan(
+        {
+          ...visual,
+          assetId: "../../private",
+        },
+        "English",
+        "3",
+      ),
+    /asset reference is invalid/,
   );
 });
 

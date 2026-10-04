@@ -494,6 +494,23 @@ export function CreatePaper() {
             setContent={setContent}
             answerKey={key}
             setAnswerKey={setKey}
+            onGenerateImage={(question) =>
+              api("generate-image", {
+                subject: settings.subject,
+                questionId: question.id,
+                questionText: question.text,
+                visual: question.visual,
+              })
+            }
+            onUploadImage={async (question, file) => {
+              const uploaded = await uploadClubFile(file, "Question Figure");
+              return {
+                ...question.visual,
+                assetId: uploaded.id,
+                assetMime: file.type,
+                status: "ready",
+              };
+            }}
             onRegenerate={async (questionIds) => {
               const next = await api("regenerate", {
                 ...settings,
@@ -806,9 +823,12 @@ function QuestionEditorCard({
   answer,
   editing,
   canRegenerate,
+  visualBusy,
   hasPageBreak,
   onEdit,
   onRegenerate,
+  onGenerateImage,
+  onUploadImage,
   onQuestion,
   onChoices,
   onType,
@@ -832,9 +852,11 @@ function QuestionEditorCard({
     });
   const [answerSpaceShortcutOpen, setAnswerSpaceShortcutOpen] = useState(false);
   const [applyAnswerSpaceToAll, setApplyAnswerSpaceToAll] = useState(false);
-  const hasAnswerLines = ["short_answer", "answer_space", "comprehension"].includes(
-    type,
-  );
+  const hasAnswerLines = [
+    "short_answer",
+    "answer_space",
+    "comprehension",
+  ].includes(type);
 
   function setChoice(choiceIndex, value) {
     const next = [...choices];
@@ -890,6 +912,21 @@ function QuestionEditorCard({
               onClick={onRegenerate}
             >
               Regenerate
+            </button>
+          )}
+          {q.visual?.strategy === "generated_image" && (
+            <button
+              type="button"
+              className="question-action"
+              disabled={visualBusy}
+              aria-label={`${q.visual.assetId ? "Regenerate" : "Generate"} image for question ${q.id}`}
+              onClick={onGenerateImage}
+            >
+              {visualBusy
+                ? "Creating image…"
+                : q.visual.assetId
+                  ? "Regenerate image"
+                  : "Generate image"}
             </button>
           )}
           <details className="question-menu">
@@ -1271,6 +1308,45 @@ function QuestionEditorCard({
               {q.visual && q.visual.strategy !== "none" && (
                 <fieldset className="figure-settings">
                   <legend>Figure</legend>
+                  {["generated_image", "source_image"].includes(
+                    q.visual.strategy,
+                  ) && (
+                    <div className="figure-asset-actions">
+                      <label className="button secondary small">
+                        {q.visual.assetId
+                          ? "Replace with upload"
+                          : "Upload image"}
+                        <input
+                          className="sr-only"
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          disabled={visualBusy}
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            if (file) onUploadImage(file);
+                            event.target.value = "";
+                          }}
+                        />
+                      </label>
+                      {q.visual.assetId && (
+                        <button
+                          type="button"
+                          className="text-button danger-text"
+                          onClick={() =>
+                            onQuestion("visual", {
+                              ...q.visual,
+                              assetId: undefined,
+                              assetMime: undefined,
+                              generatedAt: undefined,
+                              status: "planned",
+                            })
+                          }
+                        >
+                          Remove image
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <label>
                     Caption
                     <input
@@ -1396,6 +1472,8 @@ export function PaperEditor({
   answerKey,
   setAnswerKey,
   onRegenerate,
+  onGenerateImage,
+  onUploadImage,
 }) {
   const [page, setPage] = useState(1),
     [zoom, setZoom] = useState(100),
@@ -1403,6 +1481,7 @@ export function PaperEditor({
     [future, setFuture] = useState([]),
     [editingQuestion, setEditingQuestion] = useState(null),
     [regenerating, setRegenerating] = useState(false),
+    [visualBusy, setVisualBusy] = useState(""),
     [regenerationError, setRegenerationError] = useState("");
   const pages = [...new Set(content.questions.map((q) => q.page))].sort(
     (a, b) => a - b,
@@ -1494,7 +1573,8 @@ export function PaperEditor({
     update({
       ...content,
       questions: content.questions.map((item) =>
-        item.id === q.id || (applyToAll && answerLineTypes.has(questionType(item)))
+        item.id === q.id ||
+        (applyToAll && answerLineTypes.has(questionType(item)))
           ? { ...item, ...changes }
           : item,
       ),
@@ -1598,6 +1678,28 @@ export function PaperEditor({
       setRegenerating(false);
     }
   }
+  async function generateVisual(q) {
+    setVisualBusy(q.id);
+    setRegenerationError("");
+    try {
+      question(q, "visual", await onGenerateImage(q));
+    } catch (e) {
+      setRegenerationError(e.message);
+    } finally {
+      setVisualBusy("");
+    }
+  }
+  async function uploadVisual(q, file) {
+    setVisualBusy(q.id);
+    setRegenerationError("");
+    try {
+      question(q, "visual", await onUploadImage(q, file));
+    } catch (e) {
+      setRegenerationError(e.message);
+    } finally {
+      setVisualBusy("");
+    }
+  }
   return (
     <>
       <ErrorBox error={regenerationError} />
@@ -1606,7 +1708,10 @@ export function PaperEditor({
           Regenerating selected questions…
         </p>
       )}
-      <fieldset className="editor editor-fieldset" disabled={regenerating}>
+      <fieldset
+        className="editor editor-fieldset"
+        disabled={regenerating || Boolean(visualBusy)}
+      >
         <aside className="page-rail">
           {pages.map((p) => (
             <button
@@ -1734,6 +1839,7 @@ export function PaperEditor({
                       answer={answer}
                       editing={editingQuestion === q.id}
                       canRegenerate={Boolean(onRegenerate)}
+                      visualBusy={visualBusy === q.id}
                       hasPageBreak={hasPageBreak}
                       onEdit={() =>
                         setEditingQuestion((current) =>
@@ -1741,6 +1847,8 @@ export function PaperEditor({
                         )
                       }
                       onRegenerate={() => regenerate([q.id])}
+                      onGenerateImage={() => generateVisual(q)}
+                      onUploadImage={(file) => uploadVisual(q, file)}
                       onQuestion={(field, value) => question(q, field, value)}
                       onChoices={(options, answerChanges) =>
                         updateChoices(q, options, answerChanges)
@@ -1857,9 +1965,53 @@ function escapeExportText(value) {
     .replaceAll('"', "&quot;");
 }
 
-function exportWordPaper(title) {
+function blobDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () =>
+      reject(new Error("A paper image could not be read."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function waitForPaperImages(pages) {
+  const images = pages.flatMap((page) => [
+    ...page.querySelectorAll("img.question-generated-image"),
+  ]);
+  await Promise.all(
+    images.map(async (image) => {
+      if (!image.complete)
+        await new Promise((resolve, reject) => {
+          image.addEventListener("load", resolve, { once: true });
+          image.addEventListener(
+            "error",
+            () => reject(new Error("A question image could not be loaded.")),
+            { once: true },
+          );
+        });
+      if (!image.naturalWidth)
+        throw new Error("A question image could not be loaded.");
+      if (image.decode) await image.decode();
+    }),
+  );
+}
+
+async function exportWordPaper(title) {
   const pages = [...document.querySelectorAll("article.exam-paper")];
   if (!pages.length) throw new Error("The paper preview is not ready yet.");
+  const exportPages = pages.map((page) => page.cloneNode(true));
+  const images = exportPages.flatMap((page) => [
+    ...page.querySelectorAll("img.question-generated-image"),
+  ]);
+  await Promise.all(
+    images.map(async (image) => {
+      const response = await fetch(image.src, { credentials: "same-origin" });
+      if (!response.ok)
+        throw new Error("A question image could not be exported.");
+      image.src = await blobDataUrl(await response.blob());
+    }),
+  );
   const styles = `
     @page { size: A4; margin: 15mm; }
     body { color:#202d27; font-family:Georgia,'Times New Roman',serif; font-size:10.5pt; }
@@ -1883,11 +2035,12 @@ function exportWordPaper(title) {
     .fill-blank-fields i { flex:1; }
     .question-visual { width:145mm; max-width:100%; margin:12px auto; page-break-inside:avoid; text-align:center; }
     .question-visual svg { display:block; width:100%; height:auto; }
+    .question-generated-image { display:block; width:auto; max-width:100%; max-height:120mm; margin:0 auto; object-fit:contain; }
     .question-visual figcaption { margin-top:4px; color:#536158; font:8pt Arial,sans-serif; }
     .figure-title { font-family:Arial,sans-serif; font-weight:700; }
     .exam-footer { display:flex; justify-content:space-between; margin-top:20px; font-size:8pt; }
   `;
-  const documentHtml = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeExportText(title)}</title><style>${styles}</style></head><body>${pages
+  const documentHtml = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeExportText(title)}</title><style>${styles}</style></head><body>${exportPages
     .map((page) => page.outerHTML)
     .join("")}</body></html>`;
   const blob = new Blob(["\ufeff", documentHtml], {
@@ -1907,6 +2060,7 @@ async function exportPdfPaper(title, setMessage) {
   const pages = [...document.querySelectorAll("article.exam-paper")];
   if (!pages.length) throw new Error("The paper preview is not ready yet.");
   setMessage("Preparing your PDF…");
+  await waitForPaperImages(pages);
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
       import("html2canvas"),
       import("jspdf"),
@@ -1953,7 +2107,12 @@ function openPrintDialog(setMessage) {
   window.setTimeout(() => window.print(), 50);
 }
 
-function QuestionResponse({ question, value = "", onChange, answerSpaceShortcut }) {
+function QuestionResponse({
+  question,
+  value = "",
+  onChange,
+  answerSpaceShortcut,
+}) {
   const type = questionType(question),
     rawOptions = question.options || [],
     options = MC_TYPES.has(type) ? rawOptions.map(cleanChoice) : rawOptions,
@@ -2099,7 +2258,7 @@ function QuestionResponse({ question, value = "", onChange, answerSpaceShortcut 
         onChange={(event) => onChange(event.target.value)}
         placeholder="Write your answer and working here…"
       />
-    ) :
+    ) : (
       answerSpaceSurface(
         <div
           className="blank-answer-space print-space"
@@ -2108,7 +2267,8 @@ function QuestionResponse({ question, value = "", onChange, answerSpaceShortcut 
           }}
         />,
         "answer-space-shortcut-target",
-      );
+      )
+    );
   if (type === "ordering") {
     const ordered = parsedAnswer(value, []);
     return (
@@ -2375,7 +2535,7 @@ export function PaperDetail({ id }) {
           className="secondary"
           onClick={() =>
             action(async () => {
-              exportWordPaper(data.title);
+              await exportWordPaper(data.title);
               setMessage("Word document downloaded.");
             })
           }
@@ -2512,6 +2672,23 @@ export function PaperDetail({ id }) {
             setContent={setContent}
             answerKey={key}
             setAnswerKey={setKey}
+            onGenerateImage={(question) =>
+              api("generate-image", {
+                subject: data.subject,
+                questionId: question.id,
+                questionText: question.text,
+                visual: question.visual,
+              })
+            }
+            onUploadImage={async (question, file) => {
+              const uploaded = await uploadClubFile(file, "Question Figure");
+              return {
+                ...question.visual,
+                assetId: uploaded.id,
+                assetMime: file.type,
+                status: "ready",
+              };
+            }}
             onRegenerate={async (questionIds) => {
               const next = await api("version-regenerate/" + v.id, {
                 content,
