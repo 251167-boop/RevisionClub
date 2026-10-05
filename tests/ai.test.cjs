@@ -643,6 +643,62 @@ test("OpenRouter retries text requests without strict schema when the free route
   assert.equal(calls, 2);
 });
 
+test("OpenRouter retries image sources in multimodal compatibility mode", async (t) => {
+  const oldGemini = process.env.GEMINI_API_KEY,
+    oldOpenRouter = process.env.OPENROUTER_API_KEY,
+    oldFetch = global.fetch;
+  delete process.env.GEMINI_API_KEY;
+  process.env.OPENROUTER_API_KEY = "synthetic-openrouter-key";
+  t.after(() => {
+    global.fetch = oldFetch;
+    if (oldGemini === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = oldGemini;
+    if (oldOpenRouter === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = oldOpenRouter;
+  });
+  let calls = 0;
+  global.fetch = async (_url, options) => {
+    calls++;
+    const body = JSON.parse(options.body);
+    if (calls === 1)
+      return providerFailure(
+        400,
+        "INVALID_REQUEST",
+        "No endpoints found that support the requested parameters",
+      );
+    assert.equal(body.response_format, undefined);
+    assert.equal(body.provider, undefined);
+    assert.ok(
+      body.messages[1].content.some(
+        (part) =>
+          part.type === "image_url" &&
+          part.image_url.url.startsWith("data:image/png;base64,"),
+      ),
+    );
+    return openRouterResponse({
+      ...content,
+      title: "Multimodal compatibility paper",
+      answerKey: key.content,
+      sourceWarnings: [],
+      error: "",
+    });
+  };
+  const { generatePaper } = await import("../lib/club/ai.mjs");
+  const paper = await generatePaper(
+    { questionCount: 1, totalMarks: 2, duration: 30 },
+    [
+      {
+        name: "diagram.png",
+        purpose: "Revision Material",
+        mime: "image/png",
+        content: Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+      },
+    ],
+  );
+  assert.equal(paper.title, "Multimodal compatibility paper");
+  assert.equal(calls, 2);
+});
+
 test("OpenRouter reports incompatible binary sources instead of a generic rejection", async (t) => {
   const oldGemini = process.env.GEMINI_API_KEY,
     oldOpenRouter = process.env.OPENROUTER_API_KEY,
@@ -656,8 +712,11 @@ test("OpenRouter reports incompatible binary sources instead of a generic reject
     if (oldOpenRouter === undefined) delete process.env.OPENROUTER_API_KEY;
     else process.env.OPENROUTER_API_KEY = oldOpenRouter;
   });
-  global.fetch = async () =>
-    providerFailure(400, "INVALID_REQUEST", "Request cannot be routed");
+  let calls = 0;
+  global.fetch = async () => {
+    calls++;
+    return providerFailure(400, "INVALID_REQUEST", "Request cannot be routed");
+  };
   const { generatePaper } = await import("../lib/club/ai.mjs");
   await assert.rejects(
     () =>
@@ -673,6 +732,7 @@ test("OpenRouter reports incompatible binary sources instead of a generic reject
       error.publicCode === "AI_FALLBACK_FILE_UNSUPPORTED" &&
       /Retry Gemini or use extracted text/.test(error.message),
   );
+  assert.equal(calls, 2);
 });
 
 test("OpenRouter retries a structurally valid but unusable paper once", async (t) => {
