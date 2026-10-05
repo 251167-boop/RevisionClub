@@ -28,6 +28,7 @@ const QUESTION_TYPES = [
   ["fill_blanks", "Fill in the blanks"],
   ["ordering", "Ordering"],
   ["matching", "Matching"],
+  ["table", "Table with answer cells"],
 ];
 function questionType(question) {
   if (QUESTION_TYPE_IDS.includes(question.type)) return question.type;
@@ -46,6 +47,57 @@ function fillBlankAnswers(value, count) {
     .split(/\s*\|\s*/)
     .slice(0, count);
   return Array.from({ length: count }, (_, index) => answers[index] || "");
+}
+function tableCellKey(row, column) {
+  return `r${row + 1}c${column + 1}`;
+}
+function paperTable(value) {
+  const rows = Math.min(20, Math.max(1, Number(value?.rows) || 3)),
+    columns = Math.min(20, Math.max(1, Number(value?.columns) || 3)),
+    cells = Array.from({ length: rows * columns }, (_, index) => ({
+      content: String(value?.cells?.[index]?.content || ""),
+      blank: Boolean(value?.cells?.[index]?.blank),
+    }));
+  return { rows, columns, cells };
+}
+function resizePaperTable(value, rows, columns) {
+  const current = paperTable(value),
+    nextRows = Math.min(20, Math.max(1, Number(rows) || 1)),
+    nextColumns = Math.min(20, Math.max(1, Number(columns) || 1));
+  return {
+    rows: nextRows,
+    columns: nextColumns,
+    cells: Array.from({ length: nextRows * nextColumns }, (_, index) => {
+      const row = Math.floor(index / nextColumns),
+        column = index % nextColumns;
+      return row < current.rows && column < current.columns
+        ? current.cells[row * current.columns + column]
+        : { content: "", blank: false };
+    }),
+  };
+}
+function tableAnswerValues(value) {
+  try {
+    const parsed = JSON.parse(value || "{}");
+    return parsed && !Array.isArray(parsed) && typeof parsed === "object"
+      ? parsed
+      : {};
+  } catch {
+    return {};
+  }
+}
+function tableAnswer(value, values = {}) {
+  const table = paperTable(value),
+    answers = {};
+  table.cells.forEach((cell, index) => {
+    if (!cell.blank) return;
+    const key = tableCellKey(
+      Math.floor(index / table.columns),
+      index % table.columns,
+    );
+    answers[key] = String(values[key] || "").trim();
+  });
+  return JSON.stringify(answers);
 }
 const ASPECTS = [
   "Font / typography",
@@ -815,6 +867,49 @@ function NumberStepper({ label, value, min, max, unit, onChange }) {
     </div>
   );
 }
+function TableSizePicker({ rows, columns, onSelect }) {
+  const [hovered, setHovered] = useState({ rows, columns });
+  useEffect(() => setHovered({ rows, columns }), [rows, columns]);
+  return (
+    <div
+      className="table-size-picker"
+      onMouseLeave={() => setHovered({ rows, columns })}
+    >
+      <div className="table-size-picker-label" aria-live="polite">
+        {hovered.columns} × {hovered.rows} <span>columns × rows</span>
+      </div>
+      <div className="table-size-grid" role="grid" aria-label="Table size">
+        {Array.from({ length: 20 }, (_, row) =>
+          Array.from({ length: 20 }, (_, column) => {
+            const cellRows = row + 1,
+              cellColumns = column + 1,
+              active =
+                cellRows <= hovered.rows && cellColumns <= hovered.columns;
+            return (
+              <button
+                type="button"
+                role="gridcell"
+                className={active ? "selected" : ""}
+                aria-label={`${cellColumns} columns by ${cellRows} rows`}
+                aria-selected={
+                  cellRows <= rows && cellColumns <= columns ? "true" : "false"
+                }
+                key={`${cellRows}-${cellColumns}`}
+                onMouseEnter={() =>
+                  setHovered({ rows: cellRows, columns: cellColumns })
+                }
+                onFocus={() =>
+                  setHovered({ rows: cellRows, columns: cellColumns })
+                }
+                onClick={() => onSelect(cellRows, cellColumns)}
+              />
+            );
+          }),
+        )}
+      </div>
+    </div>
+  );
+}
 function QuestionEditorCard({
   question: q,
   index,
@@ -831,6 +926,7 @@ function QuestionEditorCard({
   onUploadImage,
   onQuestion,
   onChoices,
+  onTable,
   onType,
   onKey,
   onMove,
@@ -842,6 +938,8 @@ function QuestionEditorCard({
   const type = questionType(q),
     isMultipleChoice = MC_TYPES.has(type),
     choices = q.options || [],
+    table = paperTable(q.table),
+    tableAnswers = tableAnswerValues(answer.answer),
     selectedChoice = choices.findIndex((option, choiceIndex) => {
       const letter = String.fromCharCode(65 + choiceIndex);
       return (
@@ -889,6 +987,37 @@ function QuestionEditorCard({
     while (next.length <= wordIndex) next.push("");
     next[wordIndex] = value;
     onChoices(next, null);
+  }
+
+  function setTableCell(cellIndex, changes) {
+    const row = Math.floor(cellIndex / table.columns),
+      column = cellIndex % table.columns,
+      key = tableCellKey(row, column),
+      cell = table.cells[cellIndex],
+      nextAnswers = { ...tableAnswers };
+    let nextCell = { ...cell };
+    if (changes.content !== undefined) {
+      if (cell.blank) nextAnswers[key] = changes.content;
+      else nextCell.content = changes.content;
+    }
+    if (changes.blank !== undefined && changes.blank !== cell.blank) {
+      if (changes.blank) {
+        nextAnswers[key] = cell.content;
+        nextCell = { content: "", blank: true };
+      } else {
+        nextCell = { content: nextAnswers[key] || "", blank: false };
+        delete nextAnswers[key];
+      }
+    }
+    onTable(
+      {
+        ...table,
+        cells: table.cells.map((current, index) =>
+          index === cellIndex ? nextCell : current,
+        ),
+      },
+      nextAnswers,
+    );
   }
 
   return (
@@ -1275,7 +1404,81 @@ function QuestionEditorCard({
             </div>
           )}
 
-          {!isMultipleChoice && (
+          {type === "table" && (
+            <fieldset className="table-question-editor">
+              <legend>Table size and cells</legend>
+              <p className="muted small">
+                Move across the size grid, then click to choose up to 20 × 20.
+                Enter each cell&apos;s content and mark the cells students
+                should complete.
+              </p>
+              <TableSizePicker
+                rows={table.rows}
+                columns={table.columns}
+                onSelect={(rows, columns) => {
+                  const resized = resizePaperTable(table, rows, columns);
+                  onTable(resized, tableAnswers);
+                }}
+              />
+              <div className="table-cell-editor-scroll">
+                <div
+                  className="table-cell-editor-grid"
+                  style={{
+                    gridTemplateColumns: `repeat(${table.columns}, minmax(130px, 1fr))`,
+                  }}
+                >
+                  {table.cells.map((cell, cellIndex) => {
+                    const row = Math.floor(cellIndex / table.columns),
+                      column = cellIndex % table.columns;
+                    return (
+                      <div
+                        className={`table-cell-editor ${cell.blank ? "is-blank" : ""}`}
+                        key={tableCellKey(row, column)}
+                      >
+                        <span>
+                          Row {row + 1}, column {column + 1}
+                        </span>
+                        <input
+                          aria-label={`Table cell row ${row + 1} column ${column + 1}`}
+                          value={
+                            cell.blank
+                              ? tableAnswers[tableCellKey(row, column)] || ""
+                              : cell.content
+                          }
+                          placeholder={
+                            cell.blank ? "Correct answer" : "Cell content"
+                          }
+                          onChange={(event) =>
+                            setTableCell(cellIndex, {
+                              content: event.target.value,
+                            })
+                          }
+                        />
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={cell.blank}
+                            onChange={(event) =>
+                              setTableCell(cellIndex, {
+                                blank: event.target.checked,
+                              })
+                            }
+                          />
+                          Student fills this cell
+                        </label>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <p className="muted small table-answer-note">
+                Content in answer cells stays private and becomes the marking
+                key.
+              </p>
+            </fieldset>
+          )}
+
+          {!isMultipleChoice && type !== "table" && (
             <label>
               {type === "fill_blanks"
                 ? "Correct answers in blank order"
@@ -1599,6 +1802,24 @@ export function PaperEditor({
       { ...current, ...answerChanges, questionId: q.id },
     ]);
   }
+  function updateTable(q, table, values) {
+    const nextContent = {
+        ...content,
+        questions: content.questions.map((item) =>
+          item.id === q.id ? { ...item, table } : item,
+        ),
+      },
+      current = answerKey.find((entry) => entry.questionId === q.id) || {
+        questionId: q.id,
+        answer: "",
+        rubric: "",
+        alternatives: [],
+      };
+    update(nextContent, [
+      ...answerKey.filter((entry) => entry.questionId !== q.id),
+      { ...current, answer: tableAnswer(table, values), questionId: q.id },
+    ]);
+  }
   function changeQuestionType(q, type) {
     const currentType = questionType(q),
       next = { ...q, type };
@@ -1615,12 +1836,28 @@ export function PaperEditor({
       if (!String(q.text || "").includes("___"))
         next.text = q.text ? `${q.text} ___` : "Complete the sentence: ___";
     }
-    update({
+    if (type === "table") next.table = paperTable(q.table);
+    const nextContent = {
       ...content,
       questions: content.questions.map((item) =>
         item.id === q.id ? next : item,
       ),
-    });
+    };
+    if (type !== "table") return update(nextContent);
+    const current = answerKey.find((entry) => entry.questionId === q.id) || {
+      questionId: q.id,
+      answer: "",
+      rubric: "",
+      alternatives: [],
+    };
+    update(nextContent, [
+      ...answerKey.filter((entry) => entry.questionId !== q.id),
+      {
+        ...current,
+        answer: tableAnswer(next.table),
+        questionId: q.id,
+      },
+    ]);
   }
   function duplicateQuestion(q) {
     const qid = String(
@@ -1853,6 +2090,7 @@ export function PaperEditor({
                       onChoices={(options, answerChanges) =>
                         updateChoices(q, options, answerChanges)
                       }
+                      onTable={(table, values) => updateTable(q, table, values)}
                       onType={(type) => changeQuestionType(q, type)}
                       onKey={(changes) => keyEntry(q.id, changes)}
                       onMove={(direction) => moveQuestion(q, direction)}
@@ -2033,6 +2271,10 @@ async function exportWordPaper(title) {
     .fill-word-box span,.ordering-bank span { display:inline-block; margin:3px 10px; }
     .fill-blank-fields div { display:flex; gap:8px; align-items:end; margin:6px 0; }
     .fill-blank-fields i { flex:1; }
+    .paper-question-table { width:100%; border-collapse:collapse; table-layout:fixed; margin:10px 0; }
+    .paper-question-table td { min-width:18mm; min-height:9mm; border:1px solid #555; padding:7px; text-align:left; vertical-align:middle; overflow-wrap:anywhere; }
+    .paper-question-table .answer-cell { background:#fff; }
+    .table-answer-line { display:block; min-height:6mm; border-bottom:1px solid #000; }
     .question-visual { width:145mm; max-width:100%; margin:12px auto; page-break-inside:avoid; text-align:center; }
     .question-visual svg { display:block; width:100%; height:auto; }
     .question-generated-image { display:block; width:auto; max-width:100%; max-height:120mm; margin:0 auto; object-fit:contain; }
@@ -2245,6 +2487,63 @@ function QuestionResponse({
             ),
           )}
         </div>
+      </div>
+    );
+  }
+  if (type === "table") {
+    const table = paperTable(question.table),
+      responses = parsedAnswer(value, {}),
+      updateCell = (row, column, answer) => {
+        const changedKey = tableCellKey(row, column),
+          next = {};
+        table.cells.forEach((cell, index) => {
+          if (!cell.blank) return;
+          const key = tableCellKey(
+            Math.floor(index / table.columns),
+            index % table.columns,
+          );
+          next[key] = key === changedKey ? answer : responses[key] || "";
+        });
+        onChange(JSON.stringify(next));
+      };
+    return (
+      <div className="paper-table-scroll">
+        <table
+          className={`paper-question-table ${table.columns > 8 ? "is-compact" : ""} ${table.columns > 14 ? "is-dense" : ""}`}
+        >
+          <tbody>
+            {Array.from({ length: table.rows }, (_, row) => (
+              <tr key={row}>
+                {Array.from({ length: table.columns }, (_, column) => {
+                  const cell = table.cells[row * table.columns + column],
+                    key = tableCellKey(row, column);
+                  return (
+                    <td className={cell.blank ? "answer-cell" : ""} key={key}>
+                      {cell.blank ? (
+                        editable ? (
+                          <input
+                            aria-label={`Answer for table row ${row + 1} column ${column + 1}`}
+                            value={responses[key] || ""}
+                            onChange={(event) =>
+                              updateCell(row, column, event.target.value)
+                            }
+                          />
+                        ) : (
+                          <span
+                            className="table-answer-line"
+                            aria-hidden="true"
+                          />
+                        )
+                      ) : (
+                        cell.content
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     );
   }

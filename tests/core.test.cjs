@@ -60,7 +60,7 @@ test("exponential XP and all level boundaries", () => {
 });
 test("subjects and AI output validation", () => {
   assert.equal(r.SUBJECTS.length, 11);
-  assert.equal(r.QUESTION_TYPES.length, 9);
+  assert.equal(r.QUESTION_TYPES.length, 10);
   assert.throws(() => r.validSubject("Mathematics"));
   assert.throws(() =>
     r.validatePaper({
@@ -104,6 +104,21 @@ test("subjects and AI output validation", () => {
         items: ["One", "Two"],
         options: ["一", "二"],
       },
+      {
+        ...base,
+        id: "10",
+        type: "table",
+        table: {
+          rows: 2,
+          columns: 2,
+          cells: [
+            { content: "Item", blank: false },
+            { content: "Value", blank: false },
+            { content: "Water", blank: false },
+            { content: "must stay private", blank: true },
+          ],
+        },
+      },
     ];
   assert.deepEqual(
     r.validatePaper({ ...content, questions }).questions.map((q) => q.type),
@@ -113,6 +128,25 @@ test("subjects and AI output validation", () => {
   assert.equal(fillBlanks.hideWordBox, true);
   assert.equal(fillBlanks.lineSpacing, 9);
   assert.deepEqual(fillBlanks.options, ["water", "sunlight", "stone"]);
+  const tableQuestion = r.validatePaper({ ...content, questions }).questions[9];
+  assert.equal(tableQuestion.table.rows, 2);
+  assert.equal(tableQuestion.table.columns, 2);
+  assert.equal(tableQuestion.table.cells[3].blank, true);
+  assert.equal(tableQuestion.table.cells[3].content, "");
+  assert.equal(
+    r.validateKey(
+      [
+        {
+          questionId: "10",
+          answer: JSON.stringify({ r2c2: "100°C" }),
+          alternatives: [],
+          rubric: "",
+        },
+      ],
+      [tableQuestion],
+    )[0].answer,
+    JSON.stringify({ r2c2: "100°C" }),
+  );
   assert.deepEqual(
     r.validatePaper({
       ...content,
@@ -163,6 +197,25 @@ test("subjects and AI output validation", () => {
       ...content,
       questions: [
         { ...base, type: "fill_blanks", options: ["water", "sunlight"] },
+      ],
+    }),
+  );
+  assert.throws(() =>
+    r.validatePaper({
+      ...content,
+      questions: [
+        {
+          ...base,
+          type: "table",
+          table: {
+            rows: 1,
+            columns: 2,
+            cells: [
+              { content: "A", blank: false },
+              { content: "B", blank: false },
+            ],
+          },
+        },
       ],
     }),
   );

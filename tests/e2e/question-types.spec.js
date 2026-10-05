@@ -1,6 +1,6 @@
 const { test, expect } = require("@playwright/test");
 
-test("the nine base question formats render and accept their intended responses", async ({
+test("the ten base question formats render and accept their intended responses", async ({
   page,
 }) => {
   test.setTimeout(120000);
@@ -42,6 +42,13 @@ test("the nine base question formats render and accept their intended responses"
   ).toBeVisible();
   await expect(
     page.getByText("Hide word box from students", { exact: true }),
+  ).toBeVisible();
+  await format.selectOption("table");
+  await page
+    .getByRole("gridcell", { name: "4 columns by 3 rows", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Table cell row 3 column 4", { exact: true }),
   ).toBeVisible();
 
   const questions = [
@@ -147,11 +154,32 @@ test("the nine base question formats render and accept their intended responses"
       options: ["一", "二"],
       items: ["one", "two"],
     },
+    {
+      id: "10",
+      type: "table",
+      text: "Complete the boiling-point table.",
+      marks: 1,
+      topic: "Temperature",
+      page: 1,
+      space: 1,
+      options: [],
+      items: [],
+      table: {
+        rows: 2,
+        columns: 2,
+        cells: [
+          { content: "Material", blank: false },
+          { content: "Boiling point", blank: false },
+          { content: "Water", blank: false },
+          { content: "", blank: true },
+        ],
+      },
+    },
   ];
   const response = await page.request.post("/api/club/papers", {
     headers: { Origin: "http://127.0.0.1:3010" },
     data: {
-      title: "Nine question formats",
+      title: "Ten question formats",
       subject: "Maths",
       grade: "Primary 1",
       difficulty: "Foundation",
@@ -177,6 +205,7 @@ test("the nine base question formats render and accept their intended responses"
           questionId: "9",
           answer: JSON.stringify({ one: "一", two: "二" }),
         },
+        { questionId: "10", answer: JSON.stringify({ r2c2: "100°C" }) },
       ],
     },
   });
@@ -197,6 +226,10 @@ test("the nine base question formats render and accept their intended responses"
   await expect(page.locator(".fill-blank-fields > div")).toHaveCount(2);
   await expect(page.locator(".ordering-response")).toHaveCount(1);
   await expect(page.locator(".matching-response")).toHaveCount(1);
+  await expect(page.locator(".paper-question-table td")).toHaveCount(4);
+  await expect(page.locator(".paper-question-table .answer-cell")).toHaveCount(
+    1,
+  );
 
   await page.getByRole("button", { name: /Attempt paper/ }).click();
   await expect(page).toHaveURL(/attempts/);
@@ -226,10 +259,13 @@ test("the nine base question formats render and accept their intended responses"
     .selectOption("Go to school");
   await page.getByLabel("Match for one").selectOption("一");
   await page.getByLabel("Match for two").selectOption("二");
+  await page
+    .getByLabel("Answer for table row 2 column 2", { exact: true })
+    .fill("100°C");
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Draft answers saved.")).toBeVisible();
   await page.screenshot({
-    path: "test-results/nine-question-formats.png",
+    path: "test-results/ten-question-formats.png",
     fullPage: true,
   });
   expect(errors).toEqual([]);
