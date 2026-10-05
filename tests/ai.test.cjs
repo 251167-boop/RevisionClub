@@ -36,6 +36,10 @@ const openRouterResponse = (value) => ({
     choices: [{ message: { content: JSON.stringify(value) } }],
   }),
 });
+const openRouterTextResponse = (value) => ({
+  ok: true,
+  json: async () => ({ choices: [{ message: { content: value } }] }),
+});
 const providerFailure = (status, providerStatus, message, headers = {}) => ({
   ok: false,
   status,
@@ -524,26 +528,49 @@ test("OpenRouter automatically backs up Gemini with strict structured output", a
   assert.equal(marked.items[0].awarded, 2);
   assert.equal(marked.source, "OpenRouter AI · Human-provided marking scheme");
 
+  let multimodalCalls = 0;
   global.fetch = async (url, options) => {
+    multimodalCalls++;
     assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
     const body = JSON.parse(options.body),
       messageParts = body.messages[1].content;
-    assert.deepEqual(body.plugins, [
-      { id: "file-parser", pdf: { engine: "cloudflare-ai" } },
-    ]);
+    if (multimodalCalls === 1) {
+      assert.equal(body.model, "dots-studio/dots-3-note-preview:free");
+      assert.equal(body.response_format, undefined);
+      assert.deepEqual(body.plugins, [
+        { id: "file-parser", pdf: { engine: "cloudflare-ai" } },
+      ]);
+      assert.ok(
+        messageParts.some(
+          (part) =>
+            part.type === "file" &&
+            part.file.filename.endsWith(".pdf") &&
+            part.file.file_data === "data:application/pdf;base64,JVBERi0xLjQ=",
+        ),
+      );
+      assert.ok(
+        messageParts.some(
+          (part) =>
+            part.type === "image_url" &&
+            part.image_url.url === "data:image/png;base64,iVBORw0KGgo=",
+        ),
+      );
+      return openRouterTextResponse(
+        "Extracted source: evaporation is powered by solar heating.",
+      );
+    }
+    assert.equal(body.model, "openrouter/free");
+    assert.equal(body.response_format.type, "json_schema");
     assert.ok(
       messageParts.some(
         (part) =>
-          part.type === "file" &&
-          part.file.filename.endsWith(".pdf") &&
-          part.file.file_data === "data:application/pdf;base64,JVBERi0xLjQ=",
+          part.type === "text" &&
+          part.text.includes("Extracted source: evaporation"),
       ),
     );
     assert.ok(
-      messageParts.some(
-        (part) =>
-          part.type === "image_url" &&
-          part.image_url.url === "data:image/png;base64,iVBORw0KGgo=",
+      messageParts.every(
+        (part) => part.type !== "file" && part.type !== "image_url",
       ),
     );
     return openRouterResponse({
@@ -572,6 +599,7 @@ test("OpenRouter automatically backs up Gemini with strict structured output", a
     ],
   );
   assert.equal(multimodalPaper.title, "Multimodal fallback paper");
+  assert.equal(multimodalCalls, 2);
 
   requests.length = 0;
   process.env.GEMINI_API_KEY = "synthetic-gemini-key";
@@ -643,11 +671,13 @@ test("OpenRouter retries text requests without strict schema when the free route
   assert.equal(calls, 2);
 });
 
-test("OpenRouter retries image sources in multimodal compatibility mode", async (t) => {
+test("OpenRouter rotates structured vision models for image sources", async (t) => {
   const oldGemini = process.env.GEMINI_API_KEY,
     oldOpenRouter = process.env.OPENROUTER_API_KEY,
+    oldVisionModels = process.env.OPENROUTER_VISION_MODELS,
     oldFetch = global.fetch;
   delete process.env.GEMINI_API_KEY;
+  delete process.env.OPENROUTER_VISION_MODELS;
   process.env.OPENROUTER_API_KEY = "synthetic-openrouter-key";
   t.after(() => {
     global.fetch = oldFetch;
@@ -655,30 +685,50 @@ test("OpenRouter retries image sources in multimodal compatibility mode", async 
     else process.env.GEMINI_API_KEY = oldGemini;
     if (oldOpenRouter === undefined) delete process.env.OPENROUTER_API_KEY;
     else process.env.OPENROUTER_API_KEY = oldOpenRouter;
+    if (oldVisionModels === undefined)
+      delete process.env.OPENROUTER_VISION_MODELS;
+    else process.env.OPENROUTER_VISION_MODELS = oldVisionModels;
   });
   let calls = 0;
   global.fetch = async (_url, options) => {
     calls++;
     const body = JSON.parse(options.body);
-    if (calls === 1)
+    if (calls === 1) {
+      assert.equal(body.model, "dots-studio/dots-3-note-preview:free");
+      assert.equal(body.response_format, undefined);
       return providerFailure(
-        400,
-        "INVALID_REQUEST",
-        "No endpoints found that support the requested parameters",
+        429,
+        "RATE_LIMITED",
+        "Provider is temporarily rate-limited",
       );
-    assert.equal(body.response_format, undefined);
-    assert.equal(body.provider, undefined);
-    assert.ok(
-      body.messages[1].content.some(
-        (part) =>
-          part.type === "image_url" &&
-          part.image_url.url.startsWith("data:image/png;base64,"),
-      ),
-    );
+    }
+    if (calls === 2) {
+      assert.equal(body.model, "qwen/qwen3.8-27b:free");
+      assert.equal(body.response_format, undefined);
+      assert.ok(
+        body.messages[1].content.some(
+          (part) =>
+            part.type === "image_url" &&
+            part.image_url.url.startsWith("data:image/png;base64,"),
+        ),
+      );
+      return openRouterTextResponse("Extracted diagram text and labels.");
+    }
+    assert.equal(body.model, "openrouter/free");
+    assert.equal(body.response_format.type, "json_schema");
+    assert.equal(body.provider.require_parameters, true);
     return openRouterResponse({
       ...content,
+      questions: [
+        {
+          ...content.questions[0],
+          type: "fill_blanks",
+          text: "Plants use ___ during photosynthesis.",
+          options: [],
+        },
+      ],
       title: "Multimodal compatibility paper",
-      answerKey: key.content,
+      answerKey: [{ ...key.content[0], answer: "sunlight" }],
       sourceWarnings: [],
       error: "",
     });
@@ -696,14 +746,17 @@ test("OpenRouter retries image sources in multimodal compatibility mode", async 
     ],
   );
   assert.equal(paper.title, "Multimodal compatibility paper");
-  assert.equal(calls, 2);
+  assert.deepEqual(paper.questions[0].options, ["sunlight"]);
+  assert.equal(calls, 3);
 });
 
 test("OpenRouter reports incompatible binary sources instead of a generic rejection", async (t) => {
   const oldGemini = process.env.GEMINI_API_KEY,
     oldOpenRouter = process.env.OPENROUTER_API_KEY,
+    oldVisionModels = process.env.OPENROUTER_VISION_MODELS,
     oldFetch = global.fetch;
   delete process.env.GEMINI_API_KEY;
+  delete process.env.OPENROUTER_VISION_MODELS;
   process.env.OPENROUTER_API_KEY = "synthetic-openrouter-key";
   t.after(() => {
     global.fetch = oldFetch;
@@ -711,6 +764,9 @@ test("OpenRouter reports incompatible binary sources instead of a generic reject
     else process.env.GEMINI_API_KEY = oldGemini;
     if (oldOpenRouter === undefined) delete process.env.OPENROUTER_API_KEY;
     else process.env.OPENROUTER_API_KEY = oldOpenRouter;
+    if (oldVisionModels === undefined)
+      delete process.env.OPENROUTER_VISION_MODELS;
+    else process.env.OPENROUTER_VISION_MODELS = oldVisionModels;
   });
   let calls = 0;
   global.fetch = async () => {
@@ -732,7 +788,7 @@ test("OpenRouter reports incompatible binary sources instead of a generic reject
       error.publicCode === "AI_FALLBACK_FILE_UNSUPPORTED" &&
       /Retry Gemini or use extracted text/.test(error.message),
   );
-  assert.equal(calls, 2);
+  assert.equal(calls, 3);
 });
 
 test("OpenRouter retries a structurally valid but unusable paper once", async (t) => {
