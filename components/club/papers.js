@@ -868,8 +868,28 @@ function NumberStepper({ label, value, min, max, unit, onChange }) {
   );
 }
 function TableSizePicker({ rows, columns, onSelect }) {
-  const [hovered, setHovered] = useState({ rows, columns });
-  useEffect(() => setHovered({ rows, columns }), [rows, columns]);
+  const [hovered, setHovered] = useState({ rows, columns }),
+    [visible, setVisible] = useState({
+      rows: Math.max(10, rows),
+      columns: Math.max(10, columns),
+    });
+  useEffect(() => {
+    setHovered({ rows, columns });
+    setVisible({ rows: Math.max(10, rows), columns: Math.max(10, columns) });
+  }, [rows, columns]);
+  function hover(cellRows, cellColumns) {
+    setHovered({ rows: cellRows, columns: cellColumns });
+    setVisible((current) => ({
+      rows:
+        cellRows === current.rows && current.rows < 20
+          ? Math.min(20, current.rows + 2)
+          : current.rows,
+      columns:
+        cellColumns === current.columns && current.columns < 20
+          ? Math.min(20, current.columns + 2)
+          : current.columns,
+    }));
+  }
   return (
     <div
       className="table-size-picker"
@@ -878,9 +898,14 @@ function TableSizePicker({ rows, columns, onSelect }) {
       <div className="table-size-picker-label" aria-live="polite">
         {hovered.columns} × {hovered.rows} <span>columns × rows</span>
       </div>
-      <div className="table-size-grid" role="grid" aria-label="Table size">
-        {Array.from({ length: 20 }, (_, row) =>
-          Array.from({ length: 20 }, (_, column) => {
+      <div
+        className="table-size-grid"
+        role="grid"
+        aria-label="Table size"
+        style={{ gridTemplateColumns: `repeat(${visible.columns}, 12px)` }}
+      >
+        {Array.from({ length: visible.rows }, (_, row) =>
+          Array.from({ length: visible.columns }, (_, column) => {
             const cellRows = row + 1,
               cellColumns = column + 1,
               active =
@@ -895,12 +920,11 @@ function TableSizePicker({ rows, columns, onSelect }) {
                   cellRows <= rows && cellColumns <= columns ? "true" : "false"
                 }
                 key={`${cellRows}-${cellColumns}`}
-                onMouseEnter={() =>
-                  setHovered({ rows: cellRows, columns: cellColumns })
-                }
-                onFocus={() =>
-                  setHovered({ rows: cellRows, columns: cellColumns })
-                }
+                onPointerEnter={() => hover(cellRows, cellColumns)}
+                onPointerMove={(event) => {
+                  if (event.buttons) hover(cellRows, cellColumns);
+                }}
+                onFocus={() => hover(cellRows, cellColumns)}
                 onClick={() => onSelect(cellRows, cellColumns)}
               />
             );
@@ -950,6 +974,8 @@ function QuestionEditorCard({
     });
   const [answerSpaceShortcutOpen, setAnswerSpaceShortcutOpen] = useState(false);
   const [applyAnswerSpaceToAll, setApplyAnswerSpaceToAll] = useState(false);
+  const [tablePickerOpen, setTablePickerOpen] = useState(false);
+  const [activeTableCell, setActiveTableCell] = useState(null);
   const hasAnswerLines = [
     "short_answer",
     "answer_space",
@@ -1029,7 +1055,13 @@ function QuestionEditorCard({
             type="button"
             className="question-action"
             aria-label={`${editing ? "Finish editing" : "Edit"} question ${q.id}`}
-            onClick={onEdit}
+            onClick={() => {
+              if (editing) {
+                setTablePickerOpen(false);
+                setActiveTableCell(null);
+              }
+              onEdit();
+            }}
           >
             {editing ? "Done" : "Edit"}
           </button>
@@ -1209,7 +1241,14 @@ function QuestionEditorCard({
               <select
                 aria-label={`Question format ${q.id}`}
                 value={type}
-                onChange={(event) => onType(event.target.value)}
+                onChange={(event) => {
+                  const nextType = event.target.value;
+                  if (nextType === "table") setTablePickerOpen(true);
+                  else {
+                    setTablePickerOpen(false);
+                    onType(nextType);
+                  }
+                }}
               >
                 {QUESTION_TYPES.map(([value, label]) => (
                   <option key={value} value={value}>
@@ -1230,6 +1269,41 @@ function QuestionEditorCard({
               />
             </label>
           </div>
+
+          {tablePickerOpen && (
+            <div
+              className="table-picker-popover"
+              role="dialog"
+              aria-label="Choose table size"
+            >
+              <div className="table-picker-popover-heading">
+                <strong>Insert table</strong>
+                <button
+                  type="button"
+                  aria-label="Close table size picker"
+                  onClick={() => setTablePickerOpen(false)}
+                >
+                  ×
+                </button>
+              </div>
+              <TableSizePicker
+                rows={table.rows}
+                columns={table.columns}
+                onSelect={(rows, columns) => {
+                  if (type === "table") {
+                    const resized = resizePaperTable(table, rows, columns);
+                    onTable(resized, tableAnswers);
+                  } else onType("table", { rows, columns });
+                  setTablePickerOpen(false);
+                  setActiveTableCell(null);
+                }}
+              />
+              <p className="muted small">
+                Starts at 10 × 10. Move or drag along the right or bottom edge
+                to expand toward 20 × 20.
+              </p>
+            </div>
+          )}
 
           {type === "comprehension" && (
             <label>
@@ -1406,74 +1480,103 @@ function QuestionEditorCard({
 
           {type === "table" && (
             <fieldset className="table-question-editor">
-              <legend>Table size and cells</legend>
-              <p className="muted small">
-                Move across the size grid, then click to choose up to 20 × 20.
-                Enter each cell&apos;s content and mark the cells students
-                should complete.
-              </p>
-              <TableSizePicker
-                rows={table.rows}
-                columns={table.columns}
-                onSelect={(rows, columns) => {
-                  const resized = resizePaperTable(table, rows, columns);
-                  onTable(resized, tableAnswers);
-                }}
-              />
-              <div className="table-cell-editor-scroll">
-                <div
-                  className="table-cell-editor-grid"
-                  style={{
-                    gridTemplateColumns: `repeat(${table.columns}, minmax(130px, 1fr))`,
-                  }}
+              <legend>Editable table</legend>
+              <div className="table-editor-toolbar">
+                <p className="muted small">
+                  Click any cell to edit it or turn it into a student answer
+                  cell.
+                </p>
+                <button
+                  type="button"
+                  className="secondary small"
+                  onClick={() => setTablePickerOpen(true)}
                 >
-                  {table.cells.map((cell, cellIndex) => {
-                    const row = Math.floor(cellIndex / table.columns),
-                      column = cellIndex % table.columns;
-                    return (
-                      <div
-                        className={`table-cell-editor ${cell.blank ? "is-blank" : ""}`}
-                        key={tableCellKey(row, column)}
-                      >
-                        <span>
-                          Row {row + 1}, column {column + 1}
-                        </span>
-                        <input
-                          aria-label={`Table cell row ${row + 1} column ${column + 1}`}
-                          value={
-                            cell.blank
-                              ? tableAnswers[tableCellKey(row, column)] || ""
-                              : cell.content
-                          }
-                          placeholder={
-                            cell.blank ? "Correct answer" : "Cell content"
-                          }
-                          onChange={(event) =>
-                            setTableCell(cellIndex, {
-                              content: event.target.value,
-                            })
-                          }
-                        />
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={cell.blank}
-                            onChange={(event) =>
-                              setTableCell(cellIndex, {
-                                blank: event.target.checked,
-                              })
-                            }
-                          />
-                          Student fills this cell
-                        </label>
-                      </div>
-                    );
-                  })}
-                </div>
+                  Resize · {table.columns} × {table.rows}
+                </button>
+              </div>
+              <div className="paper-table-scroll table-direct-editor">
+                <table
+                  className={`paper-question-table ${table.columns > 8 ? "is-compact" : ""} ${table.columns > 14 ? "is-dense" : ""}`}
+                >
+                  <tbody>
+                    {Array.from({ length: table.rows }, (_, row) => (
+                      <tr key={row}>
+                        {Array.from({ length: table.columns }, (_, column) => {
+                          const cellIndex = row * table.columns + column,
+                            cell = table.cells[cellIndex],
+                            key = tableCellKey(row, column),
+                            active = activeTableCell === key,
+                            value = cell.blank
+                              ? tableAnswers[key] || ""
+                              : cell.content;
+                          return (
+                            <td
+                              className={`${cell.blank ? "answer-cell" : ""} ${active ? "is-editing" : ""}`}
+                              key={key}
+                              onClick={() => setActiveTableCell(key)}
+                            >
+                              {active ? (
+                                <div
+                                  className="table-inline-cell-editor"
+                                  onClick={(event) => event.stopPropagation()}
+                                >
+                                  <input
+                                    autoFocus
+                                    aria-label={`Table cell row ${row + 1} column ${column + 1}`}
+                                    value={value}
+                                    placeholder={
+                                      cell.blank
+                                        ? "Correct answer"
+                                        : "Cell content"
+                                    }
+                                    onChange={(event) =>
+                                      setTableCell(cellIndex, {
+                                        content: event.target.value,
+                                      })
+                                    }
+                                  />
+                                  <label>
+                                    <input
+                                      type="checkbox"
+                                      checked={cell.blank}
+                                      onChange={(event) =>
+                                        setTableCell(cellIndex, {
+                                          blank: event.target.checked,
+                                        })
+                                      }
+                                    />
+                                    Student blank
+                                  </label>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="table-cell-edit-button"
+                                  aria-label={`Edit table cell row ${row + 1} column ${column + 1}`}
+                                >
+                                  <span>
+                                    {value || (
+                                      <i>
+                                        {cell.blank
+                                          ? "Add correct answer"
+                                          : "Click to edit"}
+                                      </i>
+                                    )}
+                                  </span>
+                                  {cell.blank && <small>Student blank</small>}
+                                </button>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
               <p className="muted small table-answer-note">
-                Content in answer cells stays private and becomes the marking
-                key.
+                Answers in cells marked Student blank stay private and become
+                the marking key.
               </p>
             </fieldset>
           )}
@@ -1820,7 +1923,7 @@ export function PaperEditor({
       { ...current, answer: tableAnswer(table, values), questionId: q.id },
     ]);
   }
-  function changeQuestionType(q, type) {
+  function changeQuestionType(q, type, tableSize) {
     const currentType = questionType(q),
       next = { ...q, type };
     if (MC_TYPES.has(type) && !MC_TYPES.has(currentType))
@@ -1836,7 +1939,12 @@ export function PaperEditor({
       if (!String(q.text || "").includes("___"))
         next.text = q.text ? `${q.text} ___` : "Complete the sentence: ___";
     }
-    if (type === "table") next.table = paperTable(q.table);
+    if (type === "table")
+      next.table = resizePaperTable(
+        q.table,
+        tableSize?.rows || paperTable(q.table).rows,
+        tableSize?.columns || paperTable(q.table).columns,
+      );
     const nextContent = {
       ...content,
       questions: content.questions.map((item) =>
@@ -2091,7 +2199,9 @@ export function PaperEditor({
                         updateChoices(q, options, answerChanges)
                       }
                       onTable={(table, values) => updateTable(q, table, values)}
-                      onType={(type) => changeQuestionType(q, type)}
+                      onType={(type, tableSize) =>
+                        changeQuestionType(q, type, tableSize)
+                      }
                       onKey={(changes) => keyEntry(q.id, changes)}
                       onMove={(direction) => moveQuestion(q, direction)}
                       onDuplicate={() => duplicateQuestion(q)}

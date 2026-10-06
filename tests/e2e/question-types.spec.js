@@ -44,8 +44,18 @@ test("the ten base question formats render and accept their intended responses",
     page.getByText("Hide word box from students", { exact: true }),
   ).toBeVisible();
   await format.selectOption("table");
+  await expect(
+    page.getByRole("gridcell", { name: "10 columns by 10 rows", exact: true }),
+  ).toBeVisible();
   await page
     .getByRole("gridcell", { name: "4 columns by 3 rows", exact: true })
+    .click();
+  await expect(page.locator(".table-direct-editor td")).toHaveCount(12);
+  await page
+    .getByRole("button", {
+      name: "Edit table cell row 3 column 4",
+      exact: true,
+    })
     .click();
   await expect(
     page.getByLabel("Table cell row 3 column 4", { exact: true }),

@@ -1819,6 +1819,7 @@ button.mc-option[aria-pressed="true"] {
   pointer-events: none;
 }
 .question-edit-panel {
+  position: relative;
   padding: 20px 22px 24px;
   background: #fdfdf9;
 }
@@ -1998,6 +1999,46 @@ button.mc-option[aria-pressed="true"] {
   font-size: 11px;
   font-weight: 700;
 }
+.table-picker-popover {
+  position: absolute;
+  z-index: 30;
+  top: 164px;
+  left: 22px;
+  width: fit-content;
+  max-width: calc(100% - 44px);
+  padding: 12px;
+  border: 1px solid #9eaa98;
+  border-radius: 10px;
+  background: var(--paper);
+  box-shadow: 0 16px 36px #263c3033;
+}
+.table-picker-popover-heading,
+.table-editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.table-picker-popover-heading {
+  margin-bottom: 8px;
+  color: var(--forest);
+  font-size: 11px;
+}
+.table-picker-popover-heading button {
+  width: 26px;
+  min-width: 26px;
+  min-height: 26px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--forest);
+  font-size: 18px;
+}
+.table-picker-popover > p {
+  max-width: 290px;
+  margin: 8px 0 0;
+}
 .table-size-picker {
   width: fit-content;
   max-width: 100%;
@@ -2019,7 +2060,6 @@ button.mc-option[aria-pressed="true"] {
 }
 .table-size-grid {
   display: grid;
-  grid-template-columns: repeat(20, 12px);
   gap: 2px;
   max-width: 100%;
   overflow: auto;
@@ -2043,40 +2083,75 @@ button.mc-option[aria-pressed="true"] {
   outline: 2px solid var(--forest);
   outline-offset: 1px;
 }
-.table-cell-editor-scroll {
-  max-width: 100%;
-  margin-top: 14px;
-  overflow: auto;
-  border: 1px solid var(--line);
+.table-editor-toolbar {
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+.table-editor-toolbar p {
+  margin: 0;
+}
+.table-editor-toolbar button {
+  flex: 0 0 auto;
+  margin: 0;
+}
+.table-direct-editor {
+  margin-top: 0;
+  border: 1px solid #53675b;
   background: #fff;
 }
-.table-cell-editor-grid {
-  display: grid;
-  width: max-content;
-  min-width: 100%;
+.table-direct-editor .paper-question-table td {
+  padding: 0;
+  transition: background 120ms ease;
 }
-.table-cell-editor {
-  min-height: 106px;
-  padding: 8px;
-  border-right: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  background: #fff;
+.table-direct-editor .paper-question-table td:hover,
+.table-direct-editor .paper-question-table td.is-editing {
+  background: #f1f4e9;
 }
-.table-cell-editor.is-blank {
+.table-direct-editor .paper-question-table td.answer-cell {
   background: #edf2e7;
 }
-.table-cell-editor > span {
-  display: block;
-  margin-bottom: 5px;
-  color: var(--muted);
+.table-cell-edit-button {
+  display: flex;
+  min-width: 100%;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  margin: 0;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+.table-cell-edit-button i {
+  color: #8b958b;
+  font-family: var(--font);
   font-size: 8px;
-  letter-spacing: 0.04em;
+  font-style: normal;
 }
-.table-cell-editor > input {
+.table-cell-edit-button small {
+  color: var(--forest);
+  font-family: var(--font);
+  font-size: 7px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.table-inline-cell-editor {
+  min-width: 120px;
+  padding: 6px;
+}
+.table-inline-cell-editor > input {
   width: 100%;
-  margin: 0 0 7px;
+  margin: 0 0 6px;
+  padding: 5px;
+  border: 1px solid #8fa083;
+  border-radius: 4px;
+  background: #fff;
 }
-.table-cell-editor label {
+.table-inline-cell-editor label {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -2084,7 +2159,7 @@ button.mc-option[aria-pressed="true"] {
   color: var(--forest);
   font-size: 9px;
 }
-.table-cell-editor label input {
+.table-inline-cell-editor label input {
   width: auto;
   margin: 0;
 }
@@ -4032,6 +4107,13 @@ button.mc-option[aria-pressed="true"] {
     right: -4px;
     max-width: calc(100vw - 56px);
     flex-wrap: wrap;
+  }
+  .table-picker-popover {
+    left: 15px;
+    max-width: calc(100% - 30px);
+  }
+  .table-editor-toolbar {
+    flex-direction: column;
   }
 }
 @media (forced-colors: active) {
