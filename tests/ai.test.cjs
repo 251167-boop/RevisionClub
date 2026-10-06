@@ -625,6 +625,96 @@ test("OpenRouter automatically backs up Gemini with strict structured output", a
   assert.equal(requests.length, 4);
 });
 
+test("OpenRouter distinguishes daily quota, unavailable models and temporary capacity", async (t) => {
+  const oldGemini = process.env.GEMINI_API_KEY,
+    oldOpenRouter = process.env.OPENROUTER_API_KEY,
+    oldDelay = process.env.AI_RETRY_BASE_MS,
+    oldFetch = global.fetch;
+  delete process.env.GEMINI_API_KEY;
+  process.env.OPENROUTER_API_KEY = "synthetic-openrouter-key";
+  process.env.AI_RETRY_BASE_MS = "0";
+  t.after(() => {
+    global.fetch = oldFetch;
+    for (const [name, value] of [
+      ["GEMINI_API_KEY", oldGemini],
+      ["OPENROUTER_API_KEY", oldOpenRouter],
+      ["AI_RETRY_BASE_MS", oldDelay],
+    ]) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  });
+  const failure = ({ message, metadata = {}, headers = {} }) => ({
+    ok: false,
+    status: 429,
+    headers: {
+      get(name) {
+        return headers[name.toLowerCase()] || null;
+      },
+    },
+    json: async () => ({
+      error: { code: 429, message, metadata },
+    }),
+  });
+  const { generatePaper } = await import("../lib/club/ai.mjs");
+
+  let calls = 0;
+  global.fetch = async () => {
+    calls++;
+    return failure({
+      message: "Rate limit exceeded",
+      headers: {
+        "x-ratelimit-remaining": "0",
+        "x-ratelimit-reset": new Date(
+          Date.now() + 6 * 60 * 60 * 1000,
+        ).toISOString(),
+      },
+    });
+  };
+  await assert.rejects(
+    generatePaper({}, []),
+    (error) =>
+      error.publicCode === "AI_FALLBACK_DAILY_QUOTA" &&
+      /resets at 00:00 UTC/.test(error.message) &&
+      !error.retryable,
+  );
+  assert.equal(calls, 1);
+
+  calls = 0;
+  global.fetch = async () => {
+    calls++;
+    return failure({
+      message: "No compatible free model available for this request",
+    });
+  };
+  await assert.rejects(
+    generatePaper({}, []),
+    (error) =>
+      error.publicCode === "AI_FALLBACK_NO_COMPATIBLE_MODEL" &&
+      /No compatible free OpenRouter model/.test(error.message) &&
+      !error.retryable,
+  );
+  assert.equal(calls, 2);
+
+  calls = 0;
+  global.fetch = async () => {
+    calls++;
+    return failure({
+      message: "Provider is temporarily rate-limited",
+      metadata: { provider_code: "rate_limit_exceeded" },
+      headers: { "retry-after": "0" },
+    });
+  };
+  await assert.rejects(
+    generatePaper({}, []),
+    (error) =>
+      error.publicCode === "AI_FALLBACK_CAPACITY" &&
+      /temporarily rate-limited or at capacity/.test(error.message) &&
+      error.retryable,
+  );
+  assert.equal(calls, 3);
+});
+
 test("OpenRouter retries text requests without strict schema when the free router rejects it", async (t) => {
   const oldGemini = process.env.GEMINI_API_KEY,
     oldOpenRouter = process.env.OPENROUTER_API_KEY,
