@@ -535,10 +535,10 @@ test("OpenRouter automatically backs up Gemini with strict structured output", a
     const body = JSON.parse(options.body),
       messageParts = body.messages[1].content;
     if (multimodalCalls === 1) {
-      assert.equal(body.model, "dots-studio/dots-3-note-preview:free");
+      assert.equal(body.model, "openrouter/free");
       assert.equal(body.response_format, undefined);
       assert.deepEqual(body.plugins, [
-        { id: "file-parser", pdf: { engine: "cloudflare-ai" } },
+        { id: "file-parser", pdf: { engine: "pdf-text" } },
       ]);
       assert.ok(
         messageParts.some(
