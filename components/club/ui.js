@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { readApiResponse } from "@/lib/club/api-response.mjs";
+import { extractClientFileText } from "@/lib/club/client-file-text.mjs";
 
 export { readApiResponse };
 
@@ -9,14 +10,19 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const DIRECT_UPLOAD_BYTES = 4 * 1024 * 1024;
 const UPLOAD_CHUNK_BYTES = 3 * 1024 * 1024;
 
-export async function uploadClubFile(file, purpose) {
+export async function uploadClubFile(file, purpose, options = {}) {
   if (!file || !file.size) throw new Error("Choose a non-empty file.");
   if (file.size > MAX_UPLOAD_BYTES)
     throw new Error("Upload a file up to 10 MB.");
+  const extracted =
+    purpose === "Question Figure"
+      ? ""
+      : await extractClientFileText(file, { progress: options.onProgress });
   if (file.size <= DIRECT_UPLOAD_BYTES) {
     const form = new FormData();
     form.set("file", file);
     form.set("purpose", purpose);
+    if (extracted) form.set("extracted", extracted);
     const response = await fetch("/api/club/upload", {
       method: "POST",
       body: form,
@@ -37,6 +43,7 @@ export async function uploadClubFile(file, purpose) {
     form.set("name", file.name);
     form.set("mime", file.type);
     form.set("purpose", purpose);
+    if (extracted && index === total - 1) form.set("extracted", extracted);
     form.set(
       "chunk",
       file.slice(start, Math.min(file.size, start + UPLOAD_CHUNK_BYTES)),

@@ -8,6 +8,7 @@ import {
   deleteMysqlVersionDraft,
   mysqlFileUsage,
   mysqlFiles,
+  saveMysqlFileExtracted,
   mysqlPaperDraft,
   mysqlVisualAsset,
   mysqlVisualAssetPaperIds,
@@ -17,6 +18,7 @@ import {
   saveMysqlPaperDraft,
   saveMysqlVersionDraft,
 } from "@/lib/club/mysql-drafts";
+import { extractPdfText } from "@/lib/club/upload-file.mjs";
 import domain from "@/lib/club/service.cjs";
 import mysqlSync from "@/lib/club/mysql-sync.cjs";
 import rules from "@/lib/club/rules.cjs";
@@ -46,6 +48,15 @@ async function ownedFiles(userId, ids) {
   if (!uniqueIds.length) return [];
   const files = await mysqlFiles(userId, uniqueIds);
   if (files.length !== uniqueIds.length) throw new Error("File access denied.");
+  await Promise.all(
+    files.map(async (file) => {
+      if (file.extracted || file.mime !== "application/pdf") return;
+      const extracted = await extractPdfText(Buffer.from(file.content));
+      if (!extracted) return;
+      file.extracted = extracted;
+      await saveMysqlFileExtracted(userId, file.id, extracted);
+    }),
+  );
   return files;
 }
 function visualAssetIds(content) {

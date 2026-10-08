@@ -32,6 +32,7 @@ export async function POST(request) {
       mime: file.type,
       name: file.name,
       purpose,
+      extractedText: form.get("extracted"),
     });
     if (!mysqlPool) throw new Error("MySQL is required.");
     const total = await mysqlFileUsage(user.id);

@@ -295,18 +295,25 @@ export function Library({ community = false }) {
 }
 function Upload({ purpose, onAdd }) {
   const [busy, setBusy] = useState(false),
+    [progress, setProgress] = useState(""),
     [error, setError] = useState("");
   async function upload(files) {
     setBusy(true);
+    setProgress("");
     setError("");
     try {
       for (const file of Array.from(files)) {
-        onAdd(await uploadClubFile(file, purpose));
+        onAdd(
+          await uploadClubFile(file, purpose, {
+            onProgress: setProgress,
+          }),
+        );
       }
     } catch (e) {
       setError(e.message);
     } finally {
       setBusy(false);
+      setProgress("");
     }
   }
   return (
@@ -322,7 +329,7 @@ function Upload({ purpose, onAdd }) {
         <span className="upload-icon">↥</span>
         <b>
           {busy
-            ? "Uploading…"
+            ? progress || "Uploading…"
             : purpose === "Revision Material"
               ? "Drag your revision materials here"
               : `Upload ${purpose.toLowerCase()}`}

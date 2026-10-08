@@ -27,6 +27,7 @@ function cleanMetadata(form) {
     name = String(form.get("name") || "").slice(0, 200),
     mime = String(form.get("mime") || "").slice(0, 120),
     purpose = String(form.get("purpose") || ""),
+    extractedText = String(form.get("extracted") || ""),
     chunk = form.get("chunk"),
     maxChunks = Math.ceil(MAX_UPLOAD_BYTES / UPLOAD_CHUNK_BYTES);
   if (!/^[a-f0-9-]{20,64}$/i.test(uploadId))
@@ -60,6 +61,7 @@ function cleanMetadata(form) {
     name,
     mime,
     purpose,
+    extractedText,
     chunk,
   };
 }
@@ -137,6 +139,7 @@ export async function POST(request) {
       mime: metadata.mime,
       name: metadata.name,
       purpose: metadata.purpose,
+      extractedText: metadata.extractedText,
     });
     const createdAt = new Date().toISOString();
     const totalUsage = await mysqlFileUsage(user.id);

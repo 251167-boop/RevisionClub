@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { verifyAuth } from "@/lib/auth";
 import { mysqlPool } from "@/lib/mysql";
-import { mysqlFiles } from "@/lib/club/mysql-drafts";
+import {
+  mysqlFiles,
+  saveMysqlFileExtracted,
+} from "@/lib/club/mysql-drafts";
+import { extractPdfText } from "@/lib/club/upload-file.mjs";
 import { generateMinigame } from "@/lib/club/ai.mjs";
 import { readJSON } from "@/lib/club/request-body.mjs";
 import { assertSameOrigin } from "@/lib/club/security";
@@ -21,6 +25,15 @@ async function uploadedFiles(userId, fileIds) {
   if (!mysqlPool) throw new Error("MySQL is required.");
   const files = await mysqlFiles(userId, ids);
   if (files.length !== ids.length) throw new Error("File access denied.");
+  await Promise.all(
+    files.map(async (file) => {
+      if (file.extracted || file.mime !== "application/pdf") return;
+      const extracted = await extractPdfText(Buffer.from(file.content));
+      if (!extracted) return;
+      file.extracted = extracted;
+      await saveMysqlFileExtracted(userId, file.id, extracted);
+    }),
+  );
   return files;
 }
 

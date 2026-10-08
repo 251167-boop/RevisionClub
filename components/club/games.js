@@ -72,6 +72,7 @@ function Progress({ phase }) {
 
 function MaterialUpload({ files, setFiles }) {
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
 
   async function upload(selectedFiles) {
@@ -82,17 +83,23 @@ function MaterialUpload({ files, setFiles }) {
       return;
     }
     setBusy(true);
+    setProgress("");
     setError("");
     try {
       const uploaded = [];
       for (const file of incoming) {
-        uploaded.push(await uploadClubFile(file, "Revision Material"));
+        uploaded.push(
+          await uploadClubFile(file, "Revision Material", {
+            onProgress: setProgress,
+          }),
+        );
       }
       setFiles((current) => [...current, ...uploaded]);
     } catch (uploadError) {
       setError(uploadError.message);
     } finally {
       setBusy(false);
+      setProgress("");
     }
   }
 
@@ -108,7 +115,9 @@ function MaterialUpload({ files, setFiles }) {
       >
         <span className="upload-icon">↥</span>
         <b>
-          {busy ? "Uploading your material…" : "Drop revision material here"}
+          {busy
+            ? progress || "Uploading your material…"
+            : "Drop revision material here"}
         </b>
         <span>
           or click to browse · PDF, DOCX, PPTX, TXT or images · 10 MB each
