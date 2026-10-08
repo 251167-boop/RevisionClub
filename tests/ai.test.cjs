@@ -622,7 +622,7 @@ test("OpenRouter automatically backs up Gemini with strict structured output", a
       error.providerFailures[0].provider === "Gemini" &&
       error.providerFailures[1].provider === "OpenRouter",
   );
-  assert.equal(requests.length, 4);
+  assert.equal(requests.length, 3);
 });
 
 test("OpenRouter distinguishes daily quota, unavailable models and temporary capacity", async (t) => {
@@ -712,7 +712,7 @@ test("OpenRouter distinguishes daily quota, unavailable models and temporary cap
       /temporarily rate-limited or at capacity/.test(error.message) &&
       error.retryable,
   );
-  assert.equal(calls, 3);
+  assert.equal(calls, 2);
 });
 
 test("OpenRouter retries text requests without strict schema when the free router rejects it", async (t) => {
@@ -767,7 +767,8 @@ test("OpenRouter rotates structured vision models for image sources", async (t) 
     oldVisionModels = process.env.OPENROUTER_VISION_MODELS,
     oldFetch = global.fetch;
   delete process.env.GEMINI_API_KEY;
-  delete process.env.OPENROUTER_VISION_MODELS;
+  process.env.OPENROUTER_VISION_MODELS =
+    "dots-studio/dots-3-note-preview:free,qwen/qwen3.8-27b:free,google/gemma-4-26b-a4b-it:free";
   process.env.OPENROUTER_API_KEY = "synthetic-openrouter-key";
   t.after(() => {
     global.fetch = oldFetch;
@@ -793,7 +794,7 @@ test("OpenRouter rotates structured vision models for image sources", async (t) 
       );
     }
     if (calls === 2) {
-      assert.equal(body.model, "qwen/qwen3.8-27b:free");
+      assert.equal(body.model, "google/gemma-4-26b-a4b-it:free");
       assert.equal(body.response_format, undefined);
       assert.ok(
         body.messages[1].content.some(
@@ -878,7 +879,7 @@ test("OpenRouter reports incompatible binary sources instead of a generic reject
       error.publicCode === "AI_FALLBACK_FILE_UNSUPPORTED" &&
       /Retry Gemini or use extracted text/.test(error.message),
   );
-  assert.equal(calls, 3);
+  assert.equal(calls, 2);
 });
 
 test("OpenRouter retries a structurally valid but unusable paper once", async (t) => {
