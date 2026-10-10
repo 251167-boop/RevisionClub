@@ -8,6 +8,7 @@ import {
   deleteMysqlVersionDraft,
   mysqlFileUsage,
   mysqlFiles,
+  mysqlFileMetadata,
   saveMysqlFileExtracted,
   mysqlPaperDraft,
   mysqlVisualAsset,
@@ -91,6 +92,17 @@ export async function GET(request, props) {
       [resource, key] = params.path;
     let data;
     const q = new URL(request.url).searchParams;
+    if (resource === "file-source") {
+      const file = (await mysqlFiles(uid, [key]))[0];
+      if (!file) return NextResponse.json({ error: "File not found." }, { status: 404 });
+      return new NextResponse(Buffer.from(file.content), {
+        headers: {
+          "Content-Type": file.mime,
+          "Cache-Control": "private, no-store",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    }
     if (resource === "visual-asset") {
       const asset = await mysqlVisualAsset(key);
       if (!asset)
@@ -143,8 +155,33 @@ export async function GET(request, props) {
         data = key ? svc.review(uid, key) : svc.results(uid);
       else if (resource === "groups")
         data = key ? svc.group(uid, key) : svc.groups(uid);
-      else if (resource === "paper-draft")
+      else if (resource === "paper-draft") {
         data = await mysqlPaperDraft(uid, q.get("group") || "");
+        if (data?.files?.length) {
+          const actualFiles = await mysqlFileMetadata(
+            uid,
+            data.files.map((file) => file.id),
+          );
+          const byId = new Map(
+            actualFiles.map((file) => [String(file.id), file]),
+          );
+          data.files = data.files.map((file) => {
+            const actual = byId.get(String(file.id));
+            if (!actual) return file;
+            const hasExtracted = Boolean(actual.has_extracted);
+            return {
+              ...file,
+              name: actual.name,
+              purpose: actual.purpose,
+              mime: actual.mime,
+              hasExtracted,
+              status: hasExtracted
+                ? "Text read locally · ready for AI"
+                : "Text needs extraction",
+            };
+          });
+        }
+      }
       else if (resource === "version-draft")
         data = await mysqlVersionDraft(uid, key);
       else if (resource === "assignments") data = svc.assignments(uid);
@@ -217,7 +254,20 @@ export async function POST(request, props) {
     const svc = mysqlService();
     const b = await readJSON(request);
     let data;
-    if (resource === "version-regenerate") {
+    if (resource === "file-text") {
+      const extracted = String(b.extracted || "").trim();
+      if (!extracted || extracted.length > 150000)
+        throw new Error("Extracted text must contain 1–150,000 characters.");
+      const [file] = await mysqlFileMetadata(uid, [key]);
+      if (
+        !file ||
+        (file.mime !== "application/pdf" &&
+          !String(file.mime || "").startsWith("image/"))
+      )
+        throw new Error("Only PDF and image source files can be re-read.");
+      await saveMysqlFileExtracted(uid, key, extracted);
+      data = { saved: true };
+    } else if (resource === "version-regenerate") {
       rate(uid, "generate");
       const context = await mysqlVersionEditContext(uid, key);
       data = await regenerateQuestions(

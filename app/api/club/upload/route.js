@@ -15,7 +15,7 @@ export async function POST(request) {
     if (!user)
       return NextResponse.json({ error: "Sign in required." }, { status: 401 });
     assertSameOrigin(request);
-    const requestLimit = DIRECT_UPLOAD_BYTES + 256 * 1024;
+    const requestLimit = DIRECT_UPLOAD_BYTES + 1024 * 1024;
     if (Number(request.headers.get("content-length")) > requestLimit)
       throw new Error("Large files must use the chunked uploader.");
     const bytes = await readBody(request, requestLimit);
@@ -55,8 +55,10 @@ export async function POST(request) {
       id,
       name,
       purpose,
+      mime: prepared.mime,
       size: buf.length,
       status: prepared.status,
+      hasExtracted: Boolean(prepared.extracted),
     });
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 400 });

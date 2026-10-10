@@ -15,6 +15,7 @@ import {
   Badge,
   ActionForm,
   uploadClubFile,
+  reprocessClubFile,
 } from "./ui";
 const { SUBJECTS, QUESTION_TYPES: QUESTION_TYPE_IDS, stripChoiceLabel } = rules;
 const MC_TYPES = new Set(["mc_box", "mc_single_box", "mc_circle"]);
@@ -377,6 +378,8 @@ export function CreatePaper() {
     [content, setContent] = useState(null),
     [key, setKey] = useState([]),
     [busy, setBusy] = useState(""),
+    [readingFileId, setReadingFileId] = useState(""),
+    [readingProgress, setReadingProgress] = useState(""),
     [busySeconds, setBusySeconds] = useState(0),
     [error, setError] = useState(""),
     [mode, setMode] = useState("ai");
@@ -448,6 +451,28 @@ export function CreatePaper() {
       setError(e.message);
     } finally {
       setBusy("");
+    }
+  }
+
+  async function rereadFile(file) {
+    setReadingFileId(String(file.id));
+    setReadingProgress("Opening saved source…");
+    setError("");
+    try {
+      const result = await reprocessClubFile(file, {
+        onProgress: setReadingProgress,
+      });
+      setFiles((current) =>
+        current.map((item) =>
+          String(item.id) === String(file.id) ? { ...item, ...result } : item,
+        ),
+      );
+      setDraftMessage(`${file.name} was read and saved for AI generation.`);
+    } catch (readError) {
+      setError(readError.message);
+    } finally {
+      setReadingFileId("");
+      setReadingProgress("");
     }
   }
 
@@ -616,8 +641,22 @@ export function CreatePaper() {
                         ▤ {f.name}
                         <small>{f.status}</small>
                       </span>
+                      {(f.mime === "application/pdf" ||
+                        String(f.mime || "").startsWith("image/")) &&
+                      !f.hasExtracted ? (
+                        <button
+                          className="secondary"
+                          disabled={!!readingFileId || !!busy}
+                          onClick={() => rereadFile(f)}
+                        >
+                          {readingFileId === String(f.id)
+                            ? readingProgress || "Reading…"
+                            : "Read text"}
+                        </button>
+                      ) : null}
                       <button
                         className="icon-button"
+                        disabled={!!readingFileId}
                         onClick={() =>
                           setFiles((x) => x.filter((v) => v.id !== f.id))
                         }

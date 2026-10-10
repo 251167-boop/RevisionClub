@@ -7,7 +7,7 @@ import { extractClientFileText } from "@/lib/club/client-file-text.mjs";
 export { readApiResponse };
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
-const DIRECT_UPLOAD_BYTES = 4 * 1024 * 1024;
+const DIRECT_UPLOAD_BYTES = 3 * 1024 * 1024;
 const UPLOAD_CHUNK_BYTES = 3 * 1024 * 1024;
 
 export async function uploadClubFile(file, purpose, options = {}) {
@@ -61,6 +61,25 @@ export async function uploadClubFile(file, purpose, options = {}) {
   if (!result?.complete)
     throw new Error("The upload did not finish. Please retry.");
   return result;
+}
+
+export async function reprocessClubFile(source, options = {}) {
+  const response = await fetch(
+    "/api/club/file-source/" + encodeURIComponent(source.id),
+    { cache: "no-store" },
+  );
+  if (!response.ok)
+    return readApiResponse(response, "The saved source could not be opened.");
+  const blob = await response.blob();
+  const file = new File([blob], source.name, { type: source.mime });
+  const extracted = await extractClientFileText(file, {
+    progress: options.onProgress,
+  });
+  await api("file-text/" + encodeURIComponent(source.id), { extracted });
+  return {
+    status: "Text read locally · ready for AI",
+    hasExtracted: true,
+  };
 }
 
 export async function api(path, body) {

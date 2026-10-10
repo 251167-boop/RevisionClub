@@ -97,8 +97,10 @@ function responseFor(file, status) {
     id: file.id,
     name: file.name,
     purpose: file.purpose,
+    mime: file.mime,
     size: Number(file.content?.length || file.size || 0),
     status: status || "Ready for AI document analysis",
+    hasExtracted: Boolean(file.extracted),
   };
 }
 
@@ -108,7 +110,7 @@ export async function POST(request) {
     const { user } = await verifyAuth();
     if (!user) throw new Error("Sign in required.");
     assertSameOrigin(request);
-    const requestLimit = UPLOAD_CHUNK_BYTES + 256 * 1024;
+    const requestLimit = UPLOAD_CHUNK_BYTES + 1024 * 1024;
     if (Number(request.headers.get("content-length")) > requestLimit)
       throw new Error("Upload chunk is too large.");
     const bytes = await readBody(request, requestLimit);
@@ -162,6 +164,8 @@ export async function POST(request) {
           id: metadata.uploadId,
           name: prepared.name,
           purpose: prepared.purpose,
+          mime: prepared.mime,
+          extracted: prepared.extracted,
           content: prepared.content,
         },
         prepared.status,
