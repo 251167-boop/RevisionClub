@@ -1107,6 +1107,328 @@ button.stat-card:hover {
   gap: 24px;
   align-items: start;
 }
+.composer-expand-button {
+  margin-top: 10px;
+}
+.source-read-reminder {
+  max-width: 220px;
+  margin-left: auto;
+  color: var(--olive);
+  text-align: right;
+}
+.paper-composer {
+  position: fixed;
+  inset: 0 0 0 228px;
+  z-index: 25;
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(330px, 3fr);
+  background: var(--cream);
+  color: var(--ink);
+  overflow: hidden;
+}
+.composer-paper-area {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+}
+.composer-toolbar {
+  min-height: 70px;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+.composer-toolbar > div:first-child b,
+.composer-toolbar > div:first-child span {
+  display: block;
+}
+.composer-toolbar > div:first-child b {
+  font-family: var(--serif);
+  font-size: 18px;
+}
+.composer-toolbar > div:first-child span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.composer-toolbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.composer-toolbar-controls > label {
+  min-width: 100px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2px;
+  font-size: 9px;
+  color: var(--muted);
+}
+.composer-toolbar-controls select {
+  margin: 0;
+  padding: 6px 25px 6px 8px;
+  font-size: 11px;
+}
+.composer-toolbar-controls button {
+  white-space: nowrap;
+  padding: 8px 11px;
+  font-size: 11px;
+}
+.composer-toolbar-controls .composer-close {
+  min-width: 34px;
+  padding: 4px;
+  font-size: 20px;
+}
+.composer-pages {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(310px, 100%), 1fr));
+  align-content: start;
+  align-items: start;
+  gap: 18px;
+  overflow: auto;
+  padding: 23px;
+}
+.composer-page {
+  min-height: 390px;
+  aspect-ratio: 0.76;
+  overflow: hidden;
+  background: var(--paper);
+  border: 1px solid #d8ddcf;
+  border-radius: 5px;
+  box-shadow: 0 5px 18px #263b3210;
+  font-family: var(--composer-font, var(--serif));
+  font-size: var(--composer-font-size, 12px);
+}
+.composer-page > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 16px;
+  color: var(--olive);
+  border-bottom: 1px solid var(--line);
+  font: 700 9px var(--font);
+  letter-spacing: .12em;
+}
+.composer-page > header small {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.composer-page-body {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 15px;
+}
+.composer-page-body > p {
+  min-height: 275px;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  border: 1px dashed #d6dbce;
+  border-radius: 4px;
+  color: #899187;
+  text-align: center;
+  font: 11px var(--font);
+}
+.composer-page-block {
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #fbfcf8;
+}
+.composer-page-block > span {
+  color: var(--olive);
+  font: 18px var(--font);
+}
+.composer-page-block b {
+  font-size: 1em;
+}
+.composer-page-block small {
+  color: var(--muted);
+  font: 9px var(--font);
+}
+.composer-controls {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 18px 16px 14px;
+  background: #f9faf5;
+}
+.composer-controls-heading h2 {
+  margin: 3px 0 2px;
+  font: 23px var(--serif);
+}
+.composer-controls-heading p {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.composer-block-list {
+  min-height: 0;
+  flex: 1 1 70%;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  padding: 2px 3px 10px 0;
+}
+.composer-question-card {
+  padding: 9px 10px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: 0 2px 8px #263b3208;
+  cursor: grab;
+}
+.composer-question-card:active {
+  cursor: grabbing;
+}
+.composer-question-card-title {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 5px;
+}
+.composer-question-card-title select {
+  min-width: 0;
+  margin: 0;
+  padding: 6px 25px 6px 7px;
+  font-size: 10px;
+}
+.composer-question-card-title button {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 16px;
+}
+.composer-drag-handle {
+  color: var(--olive);
+  font-size: 18px;
+}
+.composer-slider-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 20px;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+.composer-slider-row input[type="number"] {
+  width: 48px;
+  margin: 0;
+  padding: 5px;
+  text-align: center;
+  font-size: 11px;
+}
+.composer-slider-row input[type="range"] {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--forest);
+}
+.composer-slider-row output {
+  color: var(--forest);
+  font-weight: 700;
+  text-align: right;
+}
+.composer-page-select {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 9px;
+}
+.composer-page-select select {
+  max-width: 100px;
+  margin: 0;
+  padding: 4px 20px 4px 6px;
+  font-size: 9px;
+}
+.composer-add-type {
+  flex: 0 0 auto;
+  margin-top: 7px;
+  padding: 8px;
+  font-size: 10px;
+}
+.composer-more-details {
+  flex: 0 0 auto;
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.composer-details-toggle {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 8px 2px;
+  background: transparent;
+  color: var(--forest);
+  border: 0;
+  font-size: 11px;
+}
+.composer-details-toggle:hover {
+  background: transparent;
+}
+.composer-details-toggle small {
+  margin-left: auto;
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 9px;
+}
+.composer-more-details textarea {
+  min-height: 70px;
+  margin: 0 0 9px;
+  padding: 8px;
+  font-size: 10px;
+}
+.composer-generate-wrap {
+  flex: 0 0 auto;
+  padding-top: 10px;
+}
+.composer-generate-wrap button {
+  width: 100%;
+}
+.composer-generate-wrap p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 9px;
+  text-align: center;
+}
+.generation-reading-note {
+  max-width: 700px;
+  margin: 24px auto 0;
+  padding: 20px 23px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f7f8f1;
+  text-align: left;
+}
+.generation-reading-note b {
+  color: var(--forest);
+}
+.generation-reading-note p {
+  margin: 5px 0;
+  color: var(--muted);
+}
+.generation-reading-note small {
+  color: var(--muted);
+}
 .step-number {
   font-family: var(--font);
   font-size: 12px;
@@ -3564,6 +3886,41 @@ button.mc-option[aria-pressed="true"] {
   }
 }
 @media (max-width: 700px) {
+  .paper-composer {
+    inset: 0;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(42vh, 1fr) minmax(0, 1fr);
+    overflow: auto;
+  }
+  .composer-paper-area {
+    min-height: 42vh;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .composer-toolbar {
+    min-height: 62px;
+    flex-wrap: wrap;
+    padding: 9px 12px;
+  }
+  .composer-toolbar-controls {
+    flex-wrap: wrap;
+  }
+  .composer-toolbar-controls > label {
+    min-width: 82px;
+  }
+  .composer-pages {
+    grid-auto-columns: minmax(230px, 75vw);
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    padding: 12px;
+  }
+  .composer-page {
+    min-height: 320px;
+  }
+  .composer-controls {
+    min-height: 52vh;
+    padding: 14px 12px;
+  }
   .sidebar {
     transform: translateX(-100%);
     width: 228px;

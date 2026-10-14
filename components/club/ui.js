@@ -14,8 +14,11 @@ export async function uploadClubFile(file, purpose, options = {}) {
   if (!file || !file.size) throw new Error("Choose a non-empty file.");
   if (file.size > MAX_UPLOAD_BYTES)
     throw new Error("Upload a file up to 10 MB.");
+  const deferOcr =
+    options.deferOcr &&
+    (file.type === "application/pdf" || file.type.startsWith("image/"));
   const extracted =
-    purpose === "Question Figure"
+    purpose === "Question Figure" || deferOcr
       ? ""
       : await extractClientFileText(file, { progress: options.onProgress });
   if (file.size <= DIRECT_UPLOAD_BYTES) {

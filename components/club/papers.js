@@ -31,7 +31,7 @@ const QUESTION_TYPES = [
   ["matching", "Matching"],
   ["table", "Table with answer cells"],
 ];
-function GenerationProgress({ seconds = 0, title, compact = false }) {
+function GenerationProgress({ seconds = 0, title, compact = false, readingProgress = "" }) {
   // The provider returns one final response, rather than streamed milestones.
   // Keep this indicator deliberately capped until that response arrives.
   const progress = Math.min(92, 12 + Math.floor(seconds * 0.9));
@@ -67,10 +67,17 @@ function GenerationProgress({ seconds = 0, title, compact = false }) {
         {stages[activeStage][1]} <strong>{progress}%</strong>
       </p>
       {!compact && (
-        <p className="muted">
-          AI generation often takes 30–90 seconds. {seconds}s elapsed; the
-          progress bar waits near the end while the final response is checked.
-        </p>
+        <div className="generation-reading-note">
+          <b>{readingProgress || "Your uploaded materials are being prepared."}</b>
+          <p>
+            Scanned PDFs and images are read here before the paper is generated.
+            Keep this page open while text recognition and question drafting run.
+          </p>
+          <small>
+            AI generation often takes 30–90 seconds. {seconds}s elapsed; progress
+            stays near the end until the final response is checked.
+          </small>
+        </div>
       )}
       <ol className="generation-progress-steps">
         {stages.map(([, stage], index) => (
@@ -355,7 +362,7 @@ export function Library({ community = false }) {
     </>
   );
 }
-function Upload({ purpose, onAdd }) {
+function Upload({ purpose, onAdd, deferOcr = false }) {
   const [busy, setBusy] = useState(false),
     [progress, setProgress] = useState(""),
     [error, setError] = useState("");
@@ -368,6 +375,7 @@ function Upload({ purpose, onAdd }) {
         onAdd(
           await uploadClubFile(file, purpose, {
             onProgress: setProgress,
+            deferOcr,
           }),
         );
       }
@@ -439,11 +447,19 @@ export function CreatePaper() {
     [content, setContent] = useState(null),
     [key, setKey] = useState([]),
     [busy, setBusy] = useState(""),
-    [readingFileId, setReadingFileId] = useState(""),
-    [readingProgress, setReadingProgress] = useState(""),
     [busySeconds, setBusySeconds] = useState(0),
+    [readingProgress, setReadingProgress] = useState(""),
     [error, setError] = useState(""),
-    [mode, setMode] = useState("ai");
+    [mode, setMode] = useState("ai"),
+    [composerOpen, setComposerOpen] = useState(false),
+    [composerBlocks, setComposerBlocks] = useState([
+      { id: "block-1", type: "mc_box", count: 2, page: 1 },
+      { id: "block-2", type: "short_answer", count: 3, page: 1 },
+    ]),
+    [composerDetails, setComposerDetails] = useState(""),
+    [composerFont, setComposerFont] = useState("Default"),
+    [composerFontSize, setComposerFontSize] = useState("12"),
+    [generatedFormat, setGeneratedFormat] = useState(null);
   const { data: viewer } = useData("dashboard");
   const groupId = search.get("group");
   const { data: group } = useData(groupId ? "groups/" + groupId : null);
@@ -482,6 +498,19 @@ export function CreatePaper() {
         if (!active) return;
         if (d) {
           setSettings({ ...initial, ...d.settings });
+          if (Array.isArray(d.settings?.composerPreferences?.blocks))
+            setComposerBlocks(d.settings.composerPreferences.blocks);
+          if (d.settings?.composerPreferences?.details)
+            setComposerDetails(d.settings.composerPreferences.details);
+          if (d.settings?.composerPreferences?.font)
+            setComposerFont(d.settings.composerPreferences.font);
+          if (d.settings?.composerPreferences?.fontSize)
+            setComposerFontSize(String(d.settings.composerPreferences.fontSize));
+          if (d.content && d.settings?.composerPreferences)
+            setGeneratedFormat({
+              font: d.settings.composerPreferences.font || "Default",
+              fontSize: String(d.settings.composerPreferences.fontSize || 12),
+            });
           setFiles(d.files);
           setContent(d.content);
           setKey(d.answerKey);
@@ -515,38 +544,84 @@ export function CreatePaper() {
     }
   }
 
-  async function rereadFile(file) {
-    setReadingFileId(String(file.id));
-    setReadingProgress("Opening saved source…");
-    setError("");
-    try {
-      const result = await reprocessClubFile(file, {
-        onProgress: setReadingProgress,
-      });
-      setFiles((current) =>
-        current.map((item) =>
-          String(item.id) === String(file.id) ? { ...item, ...result } : item,
-        ),
-      );
-      setDraftMessage(`${file.name} was read and saved for AI generation.`);
-    } catch (readError) {
-      setError(readError.message);
-    } finally {
-      setReadingFileId("");
-      setReadingProgress("");
-    }
-  }
-
   const set = (name, value) => setSettings((s) => ({ ...s, [name]: value }));
-  async function generate() {
+  async function generate(composer = false) {
     setError("");
+    setComposerOpen(false);
     setBusy("Analysing materials and generating your paper");
     try {
+      let readyFiles = [...files];
+      const unreadSources = readyFiles.filter(
+        (file) =>
+          !file.hasExtracted &&
+          (file.mime === "application/pdf" ||
+            String(file.mime || "").startsWith("image/")),
+      );
+      for (let index = 0; index < unreadSources.length; index++) {
+        const file = unreadSources[index];
+        setReadingProgress(
+          `Reading source material ${index + 1} of ${unreadSources.length}…`,
+        );
+        const extracted = await reprocessClubFile(file, {
+          onProgress: setReadingProgress,
+        });
+        readyFiles = readyFiles.map((item) =>
+          String(item.id) === String(file.id)
+            ? { ...item, ...extracted }
+            : item,
+        );
+        setFiles(readyFiles);
+      }
+      setReadingProgress("");
+      const counts = composer
+        ? composerBlocks.reduce((sum, block) => sum + block.count, 0)
+        : settings.questionCount;
+      const typePlan = composer
+        ? composerBlocks
+            .map((block) => {
+              const label = QUESTION_TYPES.find(([id]) => id === block.type)?.[1];
+              return `${block.count} question(s) of type ${block.type} (${label}), starting on page ${block.page}`;
+            })
+            .join("; ")
+        : "";
+      const instructions = [
+        settings.description,
+        composer && typePlan ? `Requested question layout: ${typePlan}.` : "",
+        composer && composerDetails ? `Additional requirements: ${composerDetails}` : "",
+        composer
+          ? `Format preference: ${composerFont} font, ${composerFontSize} pt. Use approximately ${settings.pages} pages.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
       const p = await api("generate", {
         ...settings,
+        description: instructions,
+        questionCount: counts,
         groupId,
-        fileIds: files.map((f) => f.id),
+        fileIds: readyFiles.map((f) => f.id),
       });
+      if (composer) {
+        const assignedPages = composerBlocks.flatMap((block) =>
+          Array.from({ length: block.count }, () => block.page),
+        );
+        p.questions = p.questions.map((question, index) => ({
+          ...question,
+          page: assignedPages[index] || question.page,
+        }));
+        setGeneratedFormat({ font: composerFont, fontSize: composerFontSize });
+        setSettings((current) => ({
+          ...current,
+          questionCount: counts,
+          description: instructions,
+          composerPreferences: {
+            font: composerFont,
+            fontSize: Number(composerFontSize),
+            blocks: composerBlocks,
+            details: composerDetails,
+          },
+        }));
+      }
       setContent(p);
       setDraftMessage(
         "Generated paper saved as a private draft. Save draft again after editing.",
@@ -603,9 +678,9 @@ export function CreatePaper() {
         </p>
       )}
       <div className="stepper">
-        <span className={!content ? "current" : ""}>01 Materials & brief</span>
-        <span className={content ? "current" : ""}>02 Preview & refine</span>
-        <span>03 Save & share</span>
+        <span className={!busy && !content ? "current" : ""}>01 Materials & brief</span>
+        <span className={busy ? "current" : ""}>02 Read & generate</span>
+        <span className={content ? "current" : ""}>03 Preview & save</span>
       </div>
       <ErrorBox error={error} />
       {draftLoading ? (
@@ -616,6 +691,7 @@ export function CreatePaper() {
             <GenerationProgress
               title="Generating your paper"
               seconds={busySeconds}
+              readingProgress={readingProgress}
             />
           ) : (
             <>
@@ -635,6 +711,7 @@ export function CreatePaper() {
           </label>
           <PaperEditor
             content={content}
+            format={generatedFormat}
             setContent={setContent}
             answerKey={key}
             setAnswerKey={setKey}
@@ -690,6 +767,7 @@ export function CreatePaper() {
               </div>
               <Upload
                 purpose="Revision Material"
+                deferOcr
                 onAdd={(f) => setFiles((x) => [...x, f])}
               />
               <div className="file-list">
@@ -704,19 +782,11 @@ export function CreatePaper() {
                       {(f.mime === "application/pdf" ||
                         String(f.mime || "").startsWith("image/")) &&
                       !f.hasExtracted ? (
-                        <button
-                          className="secondary"
-                          disabled={!!readingFileId || !!busy}
-                          onClick={() => rereadFile(f)}
-                        >
-                          {readingFileId === String(f.id)
-                            ? readingProgress || "Reading…"
-                            : "Read text"}
-                        </button>
+                        <small className="source-read-reminder">Text will be read when you generate the paper</small>
                       ) : null}
                       <button
                         className="icon-button"
-                        disabled={!!readingFileId}
+                        disabled={!!busy}
                         onClick={() =>
                           setFiles((x) => x.filter((v) => v.id !== f.id))
                         }
@@ -786,6 +856,7 @@ export function CreatePaper() {
               </h2>
               <Upload
                 purpose="Sample Paper"
+                deferOcr
                 onAdd={(f) => setFiles((x) => [...x, f])}
               />
               <p className="muted">
@@ -814,6 +885,7 @@ export function CreatePaper() {
               </div>
               <Upload
                 purpose="Answer Key / Marking Scheme"
+                deferOcr
                 onAdd={(f) => setFiles((x) => [...x, f])}
               />
               {files
@@ -885,7 +957,13 @@ export function CreatePaper() {
                 />
                 Generate Answer Key
               </label>
-              <button className="full" onClick={generate}>
+              <button
+                className="secondary full composer-expand-button"
+                onClick={() => setComposerOpen(true)}
+              >
+                ⛶ Expand paper workspace
+              </button>
+              <button className="full" onClick={() => generate(false)}>
                 ✦ Generate paper
               </button>
               <p className="muted small">
@@ -940,7 +1018,177 @@ export function CreatePaper() {
           </aside>
         </div>
       )}
+      {composerOpen && !content && !busy && (
+        <PaperComposer
+          pages={settings.pages}
+          blocks={composerBlocks}
+          setBlocks={setComposerBlocks}
+          details={composerDetails}
+          setDetails={setComposerDetails}
+          font={composerFont}
+          setFont={setComposerFont}
+          fontSize={composerFontSize}
+          setFontSize={setComposerFontSize}
+          onAddPage={() => set("pages", Math.min(30, Number(settings.pages) + 1))}
+          onClose={() => setComposerOpen(false)}
+          onGenerate={() => generate(true)}
+          disabled={!!busy}
+        />
+      )}
     </>
+  );
+}
+function PaperComposer({
+  pages,
+  blocks,
+  setBlocks,
+  details,
+  setDetails,
+  font,
+  setFont,
+  fontSize,
+  setFontSize,
+  onAddPage,
+  onClose,
+  onGenerate,
+  disabled,
+}) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  function update(id, patch) {
+    setBlocks((current) =>
+      current.map((block) => (block.id === id ? { ...block, ...patch } : block)),
+    );
+  }
+  function addBlock(type = "short_answer") {
+    setBlocks((current) => [
+      ...current,
+      {
+        id: `block-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
+        type,
+        count: 1,
+        page: 1,
+      },
+    ]);
+  }
+  return (
+    <section className="paper-composer" aria-label="Expanded paper workspace">
+      <div className="composer-paper-area">
+        <header className="composer-toolbar">
+          <div>
+            <b>Paper workspace</b>
+            <span>Arrange question types across your pages</span>
+          </div>
+          <div className="composer-toolbar-controls">
+            <button className="secondary" onClick={onAddPage} disabled={pages >= 30}>
+              + Add page
+            </button>
+            <label>
+              Font
+              <select value={font} onChange={(event) => setFont(event.target.value)}>
+                <option>Default</option>
+                <option>Times New Roman</option>
+                <option>Arial</option>
+              </select>
+            </label>
+            <label>
+              Size
+              <select value={fontSize} onChange={(event) => setFontSize(event.target.value)}>
+                {[10, 11, 12, 13, 14, 16].map((size) => (
+                  <option key={size} value={size}>{size} pt</option>
+                ))}
+              </select>
+            </label>
+            <button className="icon-button composer-close" aria-label="Close expanded workspace" onClick={onClose}>×</button>
+          </div>
+        </header>
+        <div className="composer-pages" style={{
+          "--composer-font-size": `${fontSize}px`,
+          "--composer-font": font === "Times New Roman"
+            ? '"Times New Roman", Times, serif'
+            : font === "Arial"
+              ? "Arial, Helvetica, sans-serif"
+              : "Georgia, serif",
+        }}>
+          {Array.from({ length: Math.max(1, Number(pages) || 1) }, (_, index) => {
+            const page = index + 1;
+            const pageBlocks = blocks.filter((block) => block.page === page);
+            return (
+              <article
+                className="composer-page"
+                key={page}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const id = event.dataTransfer.getData("text/plain");
+                  if (id) update(id, { page });
+                }}
+                aria-label={`Paper page ${page}, drop question types here`}
+              >
+                <header><span>PAGE {page}</span><small>{pageBlocks.length ? `${pageBlocks.length} question group${pageBlocks.length === 1 ? "" : "s"}` : "Drop a question box here"}</small></header>
+                <div className="composer-page-body">
+                  {pageBlocks.length ? pageBlocks.map((block) => {
+                    const label = QUESTION_TYPES.find(([id]) => id === block.type)?.[1] || block.type;
+                    return <div className="composer-page-block" key={block.id}>
+                      <span>⠿</span><b>{label}</b><small>{block.count} question{block.count === 1 ? "" : "s"}</small>
+                    </div>;
+                  }) : <p>Your generated questions will be laid out here.</p>}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </div>
+      <aside className="composer-controls">
+        <div className="composer-controls-heading">
+          <div className="eyebrow">BUILD YOUR PAPER</div>
+          <h2>Question mix</h2>
+          <p>Drag boxes onto a page to choose where each group should begin.</p>
+        </div>
+        <div className="composer-block-list">
+          {blocks.map((block, index) => {
+            const label = QUESTION_TYPES.find(([id]) => id === block.type)?.[1] || block.type;
+            return (
+              <article
+                className="composer-question-card"
+                key={block.id}
+                draggable
+                onDragStart={(event) => event.dataTransfer.setData("text/plain", block.id)}
+              >
+                <div className="composer-question-card-title">
+                  <span className="composer-drag-handle" aria-hidden="true">⠿</span>
+                  <label className="sr-only" htmlFor={`composer-type-${block.id}`}>Question type {index + 1}</label>
+                  <select id={`composer-type-${block.id}`} value={block.type} onChange={(event) => update(block.id, { type: event.target.value })}>
+                    {QUESTION_TYPES.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+                  </select>
+                  <button className="icon-button" aria-label={`Remove ${label}`} onClick={() => setBlocks((current) => current.filter((item) => item.id !== block.id))} disabled={blocks.length <= 1}>×</button>
+                </div>
+                <div className="composer-slider-row">
+                  <input aria-label={`${label} question count`} type="number" min="1" max="10" value={block.count} onChange={(event) => update(block.id, { count: Math.min(10, Math.max(1, Number(event.target.value) || 1)) })} />
+                  <input aria-label={`${label} question count slider`} type="range" min="1" max="10" value={block.count} onChange={(event) => update(block.id, { count: Number(event.target.value) })} />
+                  <output>{block.count}</output>
+                </div>
+                <label className="composer-page-select">Start on page
+                  <select value={block.page} onChange={(event) => update(block.id, { page: Number(event.target.value) })}>
+                    {Array.from({ length: Math.max(1, Number(pages) || 1) }, (_, page) => <option key={page + 1} value={page + 1}>Page {page + 1}</option>)}
+                  </select>
+                </label>
+              </article>
+            );
+          })}
+        </div>
+        <button className="secondary full composer-add-type" onClick={() => addBlock()}>+ Add question type box</button>
+        <div className="composer-more-details">
+          <button className="composer-details-toggle" aria-expanded={detailsOpen} onClick={() => setDetailsOpen((open) => !open)}>
+            <span>{detailsOpen ? "⌄" : "›"}</span> More details <small>Personalize your paper</small>
+          </button>
+          {detailsOpen && <textarea rows={4} value={details} onChange={(event) => setDetails(event.target.value)} placeholder="e.g. Include a real-life context, use vocabulary from Chapter 3, or avoid calculator questions." />}
+        </div>
+        <div className="composer-generate-wrap">
+          <button className="full" onClick={onGenerate} disabled={disabled}>✦ Generate paper</button>
+          <p>Review every generated question before saving.</p>
+        </div>
+      </aside>
+    </section>
   );
 }
 function NumberStepper({ label, value, min, max, unit, onChange }) {
@@ -1880,6 +2128,7 @@ function QuestionEditorCard({
 
 export function PaperEditor({
   content,
+  format,
   setContent,
   answerKey,
   setAnswerKey,
@@ -2267,7 +2516,23 @@ export function PaperEditor({
             </span>
           </div>
           <div className="editor-page-scroll">
-            <article className="exam-paper" style={{ zoom: zoom / 100 }}>
+            <article
+              className="exam-paper"
+              style={{
+                zoom: zoom / 100,
+                ...(format
+                  ? {
+                      fontFamily:
+                        format.font === "Times New Roman"
+                          ? '"Times New Roman", Times, serif'
+                          : format.font === "Arial"
+                            ? "Arial, Helvetica, sans-serif"
+                            : "Georgia, serif",
+                      fontSize: `${format.fontSize}pt`,
+                    }
+                  : {}),
+              }}
+            >
               <div className="exam-brand">
                 REVISION CLUB <span>PRACTICE PAPER</span>
               </div>
