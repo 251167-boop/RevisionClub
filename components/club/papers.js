@@ -452,10 +452,7 @@ export function CreatePaper() {
     [error, setError] = useState(""),
     [mode, setMode] = useState("ai"),
     [composerOpen, setComposerOpen] = useState(false),
-    [composerBlocks, setComposerBlocks] = useState([
-      { id: "block-1", type: "mc_box", count: 2, page: 1 },
-      { id: "block-2", type: "short_answer", count: 3, page: 1 },
-    ]),
+    [composerBlocks, setComposerBlocks] = useState([]),
     [composerDetails, setComposerDetails] = useState(""),
     [composerFont, setComposerFont] = useState("Default"),
     [composerFontSize, setComposerFontSize] = useState("12"),
@@ -1059,16 +1056,75 @@ function PaperComposer({
       current.map((block) => (block.id === id ? { ...block, ...patch } : block)),
     );
   }
-  function addBlock(type = "short_answer") {
-    setBlocks((current) => [
-      ...current,
-      {
-        id: `block-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
+  function addBlock(type = "short_answer", page = 1, beforeId = "") {
+    setBlocks((current) => {
+      let suffix = 1;
+      while (current.some((item) => item.id === `paper-question-${suffix}`))
+        suffix++;
+      const block = {
+        id: `paper-question-${suffix}`,
         type,
         count: 1,
-        page: 1,
-      },
-    ]);
+        page,
+      };
+      const target = current.findIndex((item) => item.id === beforeId);
+      if (target < 0) return [...current, block];
+      return [...current.slice(0, target), block, ...current.slice(target)];
+    });
+  }
+  function moveBlock(id, direction) {
+    setBlocks((current) => {
+      const from = current.findIndex((item) => item.id === id);
+      const to = from + direction;
+      if (from < 0 || to < 0 || to >= current.length) return current;
+      const next = [...current];
+      [next[from], next[to]] = [next[to], next[from]];
+      return next;
+    });
+  }
+  function moveBlockBefore(id, beforeId) {
+    setBlocks((current) => {
+      const from = current.findIndex((item) => item.id === id);
+      const to = current.findIndex((item) => item.id === beforeId);
+      if (from < 0 || to < 0 || from === to) return current;
+      const next = [...current];
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      return next;
+    });
+  }
+  function beginToolboxDrag(event, type) {
+    event.dataTransfer.setData("application/x-revision-question-type", type);
+    event.dataTransfer.effectAllowed = "copy";
+  }
+  function beginQuestionDrag(event, id) {
+    event.stopPropagation();
+    event.dataTransfer.setData("text/plain", id);
+    event.dataTransfer.effectAllowed = "move";
+  }
+  function dropOnPage(event, page) {
+    event.preventDefault();
+    const type = event.dataTransfer.getData("application/x-revision-question-type");
+    if (type) {
+      addBlock(type, page);
+      return;
+    }
+    const id = event.dataTransfer.getData("text/plain");
+    if (id) update(id, { page });
+  }
+  function dropOnQuestion(event, page, targetId) {
+    event.preventDefault();
+    event.stopPropagation();
+    const type = event.dataTransfer.getData("application/x-revision-question-type");
+    if (type) {
+      addBlock(type, page, targetId);
+      return;
+    }
+    const id = event.dataTransfer.getData("text/plain");
+    if (id) {
+      update(id, { page });
+      if (id !== targetId) moveBlockBefore(id, targetId);
+    }
   }
   return (
     <section className="paper-composer" aria-label="Expanded paper workspace">
@@ -1117,20 +1173,58 @@ function PaperComposer({
                 className="composer-page"
                 key={page}
                 onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  const id = event.dataTransfer.getData("text/plain");
-                  if (id) update(id, { page });
-                }}
+                onDrop={(event) => dropOnPage(event, page)}
                 aria-label={`Paper page ${page}, drop question types here`}
               >
                 <header><span>PAGE {page}</span><small>{pageBlocks.length ? `${pageBlocks.length} question group${pageBlocks.length === 1 ? "" : "s"}` : "Drop a question box here"}</small></header>
                 <div className="composer-page-body">
                   {pageBlocks.length ? pageBlocks.map((block) => {
                     const label = QUESTION_TYPES.find(([id]) => id === block.type)?.[1] || block.type;
-                    return <div className="composer-page-block" key={block.id}>
-                      <span>⠿</span><b>{label}</b><small>{block.count} question{block.count === 1 ? "" : "s"}</small>
-                    </div>;
+                    const blockIndex = blocks.findIndex((item) => item.id === block.id);
+                    return (
+                      <section
+                        className="composer-page-block"
+                        key={block.id}
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={(event) => dropOnQuestion(event, page, block.id)}
+                      >
+                        <header className="composer-page-block-heading">
+                          <button
+                            type="button"
+                            className="composer-drag-handle"
+                            draggable
+                            aria-label={`Drag to reorder ${label}`}
+                            title="Drag to reorder"
+                            onDragStart={(event) => beginQuestionDrag(event, block.id)}
+                          >
+                            ⠿
+                          </button>
+                          <b>{label}</b>
+                          <button type="button" className="composer-order-button" aria-label={`Move ${label} up`} disabled={blockIndex <= 0} onClick={() => moveBlock(block.id, -1)}>↑</button>
+                          <button type="button" className="composer-order-button" aria-label={`Move ${label} down`} disabled={blockIndex < 0 || blockIndex >= blocks.length - 1} onClick={() => moveBlock(block.id, 1)}>↓</button>
+                          <button type="button" className="composer-remove-button" aria-label={`Remove ${label}`} onClick={() => setBlocks((current) => current.filter((item) => item.id !== block.id))}>×</button>
+                        </header>
+                        <div className="composer-slider-row">
+                          <input
+                            aria-label={`${label} question count`}
+                            type="number"
+                            min="1"
+                            max="10"
+                            value={block.count}
+                            onChange={(event) => update(block.id, { count: Math.min(10, Math.max(1, Number(event.target.value) || 1)) })}
+                          />
+                          <input
+                            aria-label={`${label} question count slider`}
+                            type="range"
+                            min="1"
+                            max="10"
+                            value={block.count}
+                            onChange={(event) => update(block.id, { count: Number(event.target.value) })}
+                          />
+                          <output>{block.count}</output>
+                        </div>
+                      </section>
+                    );
                   }) : <p>Your generated questions will be laid out here.</p>}
                 </div>
               </article>
@@ -1142,41 +1236,28 @@ function PaperComposer({
         <div className="composer-controls-heading">
           <div className="eyebrow">BUILD YOUR PAPER</div>
           <h2>Question mix</h2>
-          <p>Drag boxes onto a page to choose where each group should begin.</p>
+          <p>Drag a question type onto a page. Its detailed card appears on the paper.</p>
         </div>
-        <div className="composer-block-list">
-          {blocks.map((block, index) => {
-            const label = QUESTION_TYPES.find(([id]) => id === block.type)?.[1] || block.type;
-            return (
-              <article
-                className="composer-question-card"
-                key={block.id}
-                draggable
-                onDragStart={(event) => event.dataTransfer.setData("text/plain", block.id)}
-              >
-                <div className="composer-question-card-title">
-                  <span className="composer-drag-handle" aria-hidden="true">⠿</span>
-                  <label className="sr-only" htmlFor={`composer-type-${block.id}`}>Question type {index + 1}</label>
-                  <select id={`composer-type-${block.id}`} value={block.type} onChange={(event) => update(block.id, { type: event.target.value })}>
-                    {QUESTION_TYPES.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-                  </select>
-                  <button className="icon-button" aria-label={`Remove ${label}`} onClick={() => setBlocks((current) => current.filter((item) => item.id !== block.id))} disabled={blocks.length <= 1}>×</button>
-                </div>
-                <div className="composer-slider-row">
-                  <input aria-label={`${label} question count`} type="number" min="1" max="10" value={block.count} onChange={(event) => update(block.id, { count: Math.min(10, Math.max(1, Number(event.target.value) || 1)) })} />
-                  <input aria-label={`${label} question count slider`} type="range" min="1" max="10" value={block.count} onChange={(event) => update(block.id, { count: Number(event.target.value) })} />
-                  <output>{block.count}</output>
-                </div>
-                <label className="composer-page-select">Start on page
-                  <select value={block.page} onChange={(event) => update(block.id, { page: Number(event.target.value) })}>
-                    {Array.from({ length: Math.max(1, Number(pages) || 1) }, (_, page) => <option key={page + 1} value={page + 1}>Page {page + 1}</option>)}
-                  </select>
-                </label>
-              </article>
-            );
-          })}
+        <div className="composer-toolbox" aria-label="Question type toolbox">
+          {QUESTION_TYPES.map(([type, label]) => (
+            <div
+              className="composer-toolbox-item"
+              key={type}
+              draggable
+              onDragStart={(event) => beginToolboxDrag(event, type)}
+            >
+              <span className="composer-toolbox-grip" aria-hidden="true">⠿</span>
+              <span>{label}</span>
+              <button
+                type="button"
+                className="composer-toolbox-add"
+                aria-label={`Add ${label} to page 1`}
+                onClick={() => addBlock(type)}
+              >+
+              </button>
+            </div>
+          ))}
         </div>
-        <button className="secondary full composer-add-type" onClick={() => addBlock()}>+ Add question type box</button>
         <div className="composer-more-details">
           <button className="composer-details-toggle" aria-expanded={detailsOpen} onClick={() => setDetailsOpen((open) => !open)}>
             <span>{detailsOpen ? "⌄" : "›"}</span> More details <small>Personalize your paper</small>
@@ -1184,8 +1265,8 @@ function PaperComposer({
           {detailsOpen && <textarea rows={4} value={details} onChange={(event) => setDetails(event.target.value)} placeholder="e.g. Include a real-life context, use vocabulary from Chapter 3, or avoid calculator questions." />}
         </div>
         <div className="composer-generate-wrap">
-          <button className="full" onClick={onGenerate} disabled={disabled}>✦ Generate paper</button>
-          <p>Review every generated question before saving.</p>
+          <button className="full" onClick={onGenerate} disabled={disabled || blocks.length === 0}>✦ Generate paper</button>
+          <p>{blocks.length} question type{blocks.length === 1 ? "" : "s"} · review the generated paper before saving.</p>
         </div>
       </aside>
     </section>

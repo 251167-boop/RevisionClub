@@ -1239,26 +1239,55 @@ button.stat-card:hover {
   font: 11px var(--font);
 }
 .composer-page-block {
-  min-height: 42px;
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 7px;
-  padding: 8px;
+  min-width: 0;
+  display: block;
+  padding: 9px 10px;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: 8px;
   background: #fbfcf8;
 }
-.composer-page-block > span {
+.composer-page-block-heading {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 26px 26px 26px;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 4px;
+}
+.composer-drag-handle,
+.composer-order-button,
+.composer-remove-button {
+  width: 25px;
+  min-width: 25px;
+  height: 25px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
   color: var(--olive);
-  font: 18px var(--font);
+  font: 16px/1 var(--font);
 }
-.composer-page-block b {
-  font-size: 1em;
+.composer-drag-handle {
+  cursor: grab;
+  touch-action: none;
 }
-.composer-page-block small {
-  color: var(--muted);
-  font: 9px var(--font);
+.composer-drag-handle:active {
+  cursor: grabbing;
+}
+.composer-order-button {
+  border: 1px solid var(--line);
+  font-size: 13px;
+}
+.composer-remove-button {
+  color: #8a5149;
+  font-size: 18px;
+}
+.composer-page-block-heading b {
+  min-width: 0;
+  color: var(--forest);
+  font: 600 10px/1.25 var(--font);
+}
+.composer-page-block .composer-slider-row {
+  margin-top: 3px;
 }
 .composer-controls {
   min-width: 0;
@@ -1278,7 +1307,7 @@ button.stat-card:hover {
   color: var(--muted);
   font-size: 10px;
 }
-.composer-block-list {
+.composer-toolbox {
   min-height: 0;
   flex: 1 1 70%;
   overflow: auto;
@@ -1287,39 +1316,40 @@ button.stat-card:hover {
   gap: 9px;
   padding: 2px 3px 10px 0;
 }
-.composer-question-card {
-  padding: 9px 10px;
+.composer-toolbox-item {
+  min-height: 40px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 27px;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px;
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: 7px;
   box-shadow: 0 2px 8px #263b3208;
   cursor: grab;
+  font-size: 10px;
+  line-height: 1.25;
 }
-.composer-question-card:active {
+.composer-toolbox-item:hover {
+  border-color: #aeb99e;
+  background: #fcfdf9;
+}
+.composer-toolbox-item:active {
   cursor: grabbing;
 }
-.composer-question-card-title {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) 28px;
-  align-items: center;
-  gap: 5px;
-}
-.composer-question-card-title select {
-  min-width: 0;
-  margin: 0;
-  padding: 6px 25px 6px 7px;
-  font-size: 10px;
-}
-.composer-question-card-title button {
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
-  padding: 0;
+.composer-toolbox-grip {
+  color: var(--olive);
+  text-align: center;
   font-size: 16px;
 }
-.composer-drag-handle {
-  color: var(--olive);
-  font-size: 18px;
+.composer-toolbox-add {
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 6px;
+  font-size: 16px;
 }
 .composer-slider-row {
   display: grid;
@@ -1344,27 +1374,6 @@ button.stat-card:hover {
   color: var(--forest);
   font-weight: 700;
   text-align: right;
-}
-.composer-page-select {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  margin-top: 5px;
-  color: var(--muted);
-  font-size: 9px;
-}
-.composer-page-select select {
-  max-width: 100px;
-  margin: 0;
-  padding: 4px 20px 4px 6px;
-  font-size: 9px;
-}
-.composer-add-type {
-  flex: 0 0 auto;
-  margin-top: 7px;
-  padding: 8px;
-  font-size: 10px;
 }
 .composer-more-details {
   flex: 0 0 auto;
