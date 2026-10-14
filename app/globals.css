@@ -1220,6 +1220,73 @@ button.stat-card:hover {
 .generation-screen h2 {
   margin-top: 20px;
 }
+.generation-progress {
+  max-width: 520px;
+  margin: 0 auto;
+  text-align: left;
+}
+.generation-progress h2 {
+  text-align: center;
+}
+.generation-progress-track {
+  height: 10px;
+  overflow: hidden;
+  background: #dfe7d8;
+  border: 1px solid #c8d3bf;
+  border-radius: 999px;
+}
+.generation-progress-track span {
+  display: block;
+  height: 100%;
+  background: var(--green);
+  border-radius: inherit;
+  transition: width 700ms ease;
+}
+.generation-progress-status {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 11px 0 5px;
+  color: var(--ink);
+  font-size: 13px;
+}
+.generation-progress-status strong {
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+}
+.generation-progress-steps {
+  display: grid;
+  gap: 8px;
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+.generation-progress-steps .active {
+  color: var(--green);
+  font-weight: 700;
+}
+.generation-progress-steps .complete {
+  color: var(--ink);
+}
+.generation-progress.compact {
+  max-width: none;
+  margin: 0 0 18px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+}
+.generation-progress.compact h2 {
+  margin: 0 0 12px;
+  text-align: left;
+  font-size: 17px;
+}
+.generation-progress.compact .generation-progress-steps {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 14px;
+}
 .editor {
   display: grid;
   grid-template-columns: 95px 1fr;

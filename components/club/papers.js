@@ -31,6 +31,67 @@ const QUESTION_TYPES = [
   ["matching", "Matching"],
   ["table", "Table with answer cells"],
 ];
+function GenerationProgress({ seconds = 0, title, compact = false }) {
+  // The provider returns one final response, rather than streamed milestones.
+  // Keep this indicator deliberately capped until that response arrives.
+  const progress = Math.min(92, 12 + Math.floor(seconds * 0.9));
+  const stages = [
+    [0, "Preparing your request"],
+    [8, "Reviewing the material and instructions"],
+    [28, "Drafting questions and marking guidance"],
+    [58, "Checking the generated paper"],
+  ];
+  const activeStage = stages.reduce(
+    (current, stage, index) => (seconds >= stage[0] ? index : current),
+    0,
+  );
+  return (
+    <section
+      className={`generation-progress${compact ? " compact" : ""}`}
+      role="status"
+      aria-live="polite"
+    >
+      {!compact && <div className="pulse" />}
+      <h2>{title}</h2>
+      <div
+        className="generation-progress-track"
+        role="progressbar"
+        aria-label="Generation progress"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        aria-valuenow={progress}
+      >
+        <span style={{ width: `${progress}%` }} />
+      </div>
+      <p className="generation-progress-status">
+        {stages[activeStage][1]} <strong>{progress}%</strong>
+      </p>
+      {!compact && (
+        <p className="muted">
+          AI generation often takes 30–90 seconds. {seconds}s elapsed; the
+          progress bar waits near the end while the final response is checked.
+        </p>
+      )}
+      <ol className="generation-progress-steps">
+        {stages.map(([, stage], index) => (
+          <li
+            key={stage}
+            className={
+              index < activeStage
+                ? "complete"
+                : index === activeStage
+                  ? "active"
+                  : ""
+            }
+          >
+            {index < activeStage ? "✓" : index === activeStage ? "●" : "○"}{" "}
+            {stage}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
 function questionType(question) {
   if (QUESTION_TYPE_IDS.includes(question.type)) return question.type;
   return question.options?.length ? "mc_box" : "short_answer";
@@ -551,18 +612,17 @@ export function CreatePaper() {
         <Loading />
       ) : busy ? (
         <section className="generation-screen" role="status">
-          <div className="pulse" />
-          <h2>{busy}…</h2>
-          <p>
-            We’ll show the paper when the response has been checked. AI
-            generation can take 30–90 seconds; this request has been running for
-            {busySeconds}s.
-          </p>
-          <ul>
-            <li>✓ Your settings are ready</li>
-            <li>● Processing your request</li>
-            <li>○ Preview and review</li>
-          </ul>
+          {busy === "Analysing materials and generating your paper" ? (
+            <GenerationProgress
+              title="Generating your paper"
+              seconds={busySeconds}
+            />
+          ) : (
+            <>
+              <div className="pulse" />
+              <h2>{busy}…</h2>
+            </>
+          )}
         </section>
       ) : content ? (
         <>
@@ -1833,6 +1893,7 @@ export function PaperEditor({
     [future, setFuture] = useState([]),
     [editingQuestion, setEditingQuestion] = useState(null),
     [regenerating, setRegenerating] = useState(false),
+    [regenerationSeconds, setRegenerationSeconds] = useState(0),
     [visualBusy, setVisualBusy] = useState(""),
     [regenerationError, setRegenerationError] = useState("");
   const pages = [...new Set(content.questions.map((q) => q.page))].sort(
@@ -1851,6 +1912,19 @@ export function PaperEditor({
     });
     setPage(pageMap.get(page) || 1);
   }, [content, page, pages, setContent]);
+  useEffect(() => {
+    if (!regenerating) {
+      setRegenerationSeconds(0);
+      return;
+    }
+    const started = Date.now();
+    setRegenerationSeconds(0);
+    const timer = window.setInterval(
+      () => setRegenerationSeconds(Math.floor((Date.now() - started) / 1000)),
+      1000,
+    );
+    return () => window.clearInterval(timer);
+  }, [regenerating]);
   function update(next, nextKey = answerKey) {
     setHistory((h) => [...h.slice(-49), { content, answerKey }]);
     setFuture([]);
@@ -2095,9 +2169,11 @@ export function PaperEditor({
     <>
       <ErrorBox error={regenerationError} />
       {regenerating && (
-        <p className="notice" role="status">
-          Regenerating selected questions…
-        </p>
+        <GenerationProgress
+          compact
+          title="Regenerating selected questions"
+          seconds={regenerationSeconds}
+        />
       )}
       <fieldset
         className="editor editor-fieldset"

@@ -2,7 +2,7 @@
 
 import renderer from "@/lib/club/visual-renderer.cjs";
 
-const { buildVisualModel } = renderer;
+const { buildVisualModel, flowDiagramLayout } = renderer;
 const ink = "#263c30",
   muted = "#718071",
   pale = "#eef2e9",
@@ -17,7 +17,7 @@ function ArrowMarker() {
       <marker
         id="figure-arrow"
         viewBox="0 0 10 10"
-        refX="8"
+        refX="10"
         refY="5"
         markerWidth="6"
         markerHeight="6"
@@ -949,13 +949,62 @@ function MapFigure({ model }) {
     </svg>
   );
 }
+function wrapFigureLabel(value, maxCharacters) {
+  const words = String(value || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean),
+    lines = [];
+  let line = "";
+  for (const original of words) {
+    const parts =
+      original.length > maxCharacters
+        ? original.match(new RegExp(`.{1,${maxCharacters}}`, "g")) || [original]
+        : [original];
+    for (const word of parts) {
+      if (line && `${line} ${word}`.length > maxCharacters) {
+        lines.push(line);
+        line = word;
+      } else line = line ? `${line} ${word}` : word;
+    }
+  }
+  if (line) lines.push(line);
+  return lines.length ? lines : [""];
+}
+function FigureNodeText({ x, y, value, width, fontSize = 10 }) {
+  const lines = wrapFigureLabel(
+    value,
+    Math.max(8, Math.floor(width / (fontSize * 0.58))),
+  );
+  return (
+    <text
+      x={x}
+      y={y}
+      textAnchor="middle"
+      dominantBaseline="middle"
+      fontSize={fontSize}
+    >
+      {lines.map((line, index) => (
+        <tspan
+          key={index}
+          x={x}
+          dy={
+            index === 0
+              ? -((lines.length - 1) * fontSize * 0.58)
+              : fontSize * 1.16
+          }
+        >
+          {line}
+        </tspan>
+      ))}
+    </text>
+  );
+}
 function FlowFigure({ model }) {
-  const cycle = ["scientific_cycle", "water_cycle", "rock_cycle"].includes(
-      model.type,
-    ),
-    items = (
+  const items = (
       model.labels.length ? model.labels : ["Stage 1", "Stage 2", "Stage 3"]
-    ).slice(0, 6);
+    ).slice(0, 6),
+    layout = flowDiagramLayout(model.type, items.length);
   if (model.type === "venn_diagram")
     return (
       <svg viewBox="0 0 520 250" role="img" aria-label={model.altText}>
@@ -1085,9 +1134,7 @@ function FlowFigure({ model }) {
           fill={pale}
           stroke={ink}
         />
-        <text x="260" y="77" textAnchor="middle" fontSize="11">
-          {root}
-        </text>
+        <FigureNodeText x={260} y={72} value={root} width={110} fontSize={9} />
         {children.map((item, index) => (
           <g key={item}>
             <path
@@ -1104,9 +1151,13 @@ function FlowFigure({ model }) {
               fill="#fff"
               stroke={ink}
             />
-            <text x={childXs[index]} y="184" textAnchor="middle" fontSize="10">
-              {item}
-            </text>
+            <FigureNodeText
+              x={childXs[index]}
+              y={180}
+              value={item}
+              width={102}
+              fontSize={9}
+            />
           </g>
         ))}
         {items.slice(4, 6).map((item, index) => (
@@ -1127,9 +1178,13 @@ function FlowFigure({ model }) {
               fill={pale}
               stroke={muted}
             />
-            <text x={childXs[index]} y="246" textAnchor="middle" fontSize="9">
-              {item}
-            </text>
+            <FigureNodeText
+              x={childXs[index]}
+              y={242}
+              value={item}
+              width={90}
+              fontSize={8}
+            />
           </g>
         ))}
       </svg>
@@ -1141,48 +1196,48 @@ function FlowFigure({ model }) {
       <text x="260" y="24" textAnchor="middle" className="figure-title">
         {model.title}
       </text>
+      {layout.edges.map((edge, index) => (
+        <line
+          key={`edge-${index}`}
+          {...edge}
+          stroke={ink}
+          strokeWidth="1.6"
+          markerEnd="url(#figure-arrow)"
+        />
+      ))}
       {items.map((item, index) => {
-        const angle = cycle
-            ? (index / items.length) * Math.PI * 2 - Math.PI / 2
-            : 0,
-          x = cycle
-            ? 260 + Math.cos(angle) * 155
-            : 70 + index * (380 / Math.max(1, items.length - 1)),
-          y = cycle ? 145 + Math.sin(angle) * 75 : 135;
+        const node = layout.nodes[index],
+          lines = wrapFigureLabel(item, node.width < 120 ? 14 : 18),
+          firstLineOffset = -((lines.length - 1) * 6);
         return (
           <g key={`${item}-${index}`}>
             <rect
-              x={x - 55}
-              y={y - 24}
-              width="110"
-              height="48"
+              x={node.x - node.width / 2}
+              y={node.y - node.height / 2}
+              width={node.width}
+              height={node.height}
               rx="9"
               fill={pale}
               stroke={ink}
+              strokeWidth="1.5"
             />
-            <text x={x} y={y + 4} textAnchor="middle" fontSize="11">
-              {item}
+            <text
+              x={node.x}
+              y={node.y}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize="10"
+            >
+              {lines.map((line, lineIndex) => (
+                <tspan
+                  key={`${index}-${lineIndex}`}
+                  x={node.x}
+                  dy={lineIndex === 0 ? firstLineOffset : 12}
+                >
+                  {line}
+                </tspan>
+              ))}
             </text>
-            {index < items.length - 1 &&
-              (() => {
-                const nextAngle = cycle
-                    ? ((index + 1) / items.length) * Math.PI * 2 - Math.PI / 2
-                    : 0,
-                  nx = cycle
-                    ? 260 + Math.cos(nextAngle) * 155
-                    : 70 + (index + 1) * (380 / Math.max(1, items.length - 1)),
-                  ny = cycle ? 145 + Math.sin(nextAngle) * 75 : 135;
-                return (
-                  <line
-                    x1={x + (cycle ? 0 : 55)}
-                    y1={y + (cycle ? 24 : 0)}
-                    x2={nx - (cycle ? 0 : 58)}
-                    y2={ny - (cycle ? 24 : 0)}
-                    stroke={ink}
-                    markerEnd="url(#figure-arrow)"
-                  />
-                );
-              })()}
           </g>
         );
       })}
@@ -1557,9 +1612,13 @@ function IctFigure({ model }) {
               fill={index ? "#fff" : pale}
               stroke={ink}
             />
-            <text x={x} y={y + 4} textAnchor="middle" fontSize="10">
-              {item}
-            </text>
+            <FigureNodeText
+              x={x}
+              y={y}
+              value={item}
+              width={98}
+              fontSize={8.5}
+            />
           </g>
         );
       })}
