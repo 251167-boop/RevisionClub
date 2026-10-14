@@ -501,12 +501,12 @@ test("OpenRouter automatically backs up Gemini with strict structured output", a
   const { generatePaper, markPaper } = await import("../lib/club/ai.mjs");
   const paper = await generatePaper({ questionCount: 1, totalMarks: 2 }, []);
   assert.equal(paper.title, "OpenRouter fallback paper");
-  assert.equal(requests.length, 3);
+  assert.equal(requests.length, 2);
   assert.equal(
     requests.filter((request) =>
       request.url.includes("generativelanguage.googleapis.com"),
     ).length,
-    2,
+    1,
   );
 
   delete process.env.GEMINI_API_KEY;
@@ -528,78 +528,20 @@ test("OpenRouter automatically backs up Gemini with strict structured output", a
   assert.equal(marked.items[0].awarded, 2);
   assert.equal(marked.source, "OpenRouter AI · Human-provided marking scheme");
 
-  let multimodalCalls = 0;
-  global.fetch = async (url, options) => {
-    multimodalCalls++;
-    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
-    const body = JSON.parse(options.body),
-      messageParts = body.messages[1].content;
-    if (multimodalCalls === 1) {
-      assert.equal(body.model, "openrouter/free");
-      assert.equal(body.response_format, undefined);
-      assert.deepEqual(body.plugins, [
-        { id: "file-parser", pdf: { engine: "pdf-text" } },
-      ]);
-      assert.ok(
-        messageParts.some(
-          (part) =>
-            part.type === "file" &&
-            part.file.filename.endsWith(".pdf") &&
-            part.file.file_data === "data:application/pdf;base64,JVBERi0xLjQ=",
-        ),
-      );
-      assert.ok(
-        messageParts.some(
-          (part) =>
-            part.type === "image_url" &&
-            part.image_url.url === "data:image/png;base64,iVBORw0KGgo=",
-        ),
-      );
-      return openRouterTextResponse(
-        "Extracted source: evaporation is powered by solar heating.",
-      );
-    }
-    assert.equal(body.model, "openrouter/free");
-    assert.equal(body.response_format.type, "json_schema");
-    assert.ok(
-      messageParts.some(
-        (part) =>
-          part.type === "text" &&
-          part.text.includes("Extracted source: evaporation"),
-      ),
-    );
-    assert.ok(
-      messageParts.every(
-        (part) => part.type !== "file" && part.type !== "image_url",
-      ),
-    );
-    return openRouterResponse({
-      ...content,
-      title: "Multimodal fallback paper",
-      answerKey: key.content,
-      sourceWarnings: [],
-      error: "",
-    });
-  };
-  const multimodalPaper = await generatePaper(
-    { questionCount: 1, totalMarks: 2 },
-    [
-      {
-        name: "notes.pdf",
-        purpose: "Revision Material",
-        mime: "application/pdf",
-        content: Buffer.from("%PDF-1.4"),
-      },
-      {
-        name: "diagram.png",
-        purpose: "Revision Material",
-        mime: "image/png",
-        content: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-      },
-    ],
+  await assert.rejects(
+    generatePaper(
+      { questionCount: 1, totalMarks: 2 },
+      [
+        {
+          name: "notes.pdf",
+          purpose: "Revision Material",
+          mime: "application/pdf",
+          content: Buffer.from("%PDF-1.4"),
+        },
+      ],
+    ),
+    /no extracted text yet/,
   );
-  assert.equal(multimodalPaper.title, "Multimodal fallback paper");
-  assert.equal(multimodalCalls, 2);
 
   requests.length = 0;
   process.env.GEMINI_API_KEY = "synthetic-gemini-key";
@@ -968,16 +910,26 @@ test("OpenRouter retries an empty successful response", async (t) => {
 test("OpenRouter retries a response-body timeout", async (t) => {
   const oldGemini = process.env.GEMINI_API_KEY,
     oldOpenRouter = process.env.OPENROUTER_API_KEY,
+    oldOpenRouterTimeout = process.env.OPENROUTER_TIMEOUT_MS,
     oldDelay = process.env.AI_RETRY_BASE_MS,
-    oldFetch = global.fetch;
+    oldFetch = global.fetch,
+    oldSignalTimeout = AbortSignal.timeout,
+    signalTimeouts = [];
   delete process.env.GEMINI_API_KEY;
   process.env.OPENROUTER_API_KEY = "synthetic-openrouter-key";
+  delete process.env.OPENROUTER_TIMEOUT_MS;
   process.env.AI_RETRY_BASE_MS = "0";
+  AbortSignal.timeout = function (milliseconds) {
+    signalTimeouts.push(milliseconds);
+    return oldSignalTimeout.call(AbortSignal, milliseconds);
+  };
   t.after(() => {
     global.fetch = oldFetch;
+    AbortSignal.timeout = oldSignalTimeout;
     for (const [name, value] of [
       ["GEMINI_API_KEY", oldGemini],
       ["OPENROUTER_API_KEY", oldOpenRouter],
+      ["OPENROUTER_TIMEOUT_MS", oldOpenRouterTimeout],
       ["AI_RETRY_BASE_MS", oldDelay],
     ]) {
       if (value === undefined) delete process.env[name];
@@ -1011,4 +963,5 @@ test("OpenRouter retries a response-body timeout", async (t) => {
   );
   assert.equal(paper.title, "Recovered from body timeout");
   assert.equal(calls, 2);
+  assert.deepEqual(signalTimeouts, [120000, 120000]);
 });

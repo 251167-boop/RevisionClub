@@ -35,6 +35,8 @@ import { randomUUID } from "node:crypto";
 import games from "@/lib/club/games.cjs";
 const { validateVisualPlan } = visualPolicy;
 export const dynamic = "force-dynamic";
+// Leave enough room for the two bounded AI provider attempts to finish.
+export const maxDuration = 300;
 let mysqlServiceInstance;
 function mysqlService() {
   if (!mysqlPool)

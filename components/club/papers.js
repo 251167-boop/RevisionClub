@@ -449,6 +449,7 @@ export function CreatePaper() {
     [busy, setBusy] = useState(""),
     [busySeconds, setBusySeconds] = useState(0),
     [readingProgress, setReadingProgress] = useState(""),
+    [aiRequestActive, setAiRequestActive] = useState(false),
     [error, setError] = useState(""),
     [mode, setMode] = useState("ai"),
     [composerOpen, setComposerOpen] = useState(false),
@@ -473,7 +474,7 @@ export function CreatePaper() {
   const [draftLoading, setDraftLoading] = useState(true),
     [draftMessage, setDraftMessage] = useState("");
   useEffect(() => {
-    if (!busy) {
+    if (!busy || !aiRequestActive) {
       setBusySeconds(0);
       return;
     }
@@ -484,7 +485,7 @@ export function CreatePaper() {
       1000,
     );
     return () => window.clearInterval(timer);
-  }, [busy]);
+  }, [busy, aiRequestActive]);
   useEffect(() => {
     let active = true;
     setDraftLoading(true);
@@ -544,6 +545,7 @@ export function CreatePaper() {
   const set = (name, value) => setSettings((s) => ({ ...s, [name]: value }));
   async function generate(composer = false) {
     setError("");
+    setAiRequestActive(false);
     setComposerOpen(false);
     setBusy("Analysing materials and generating your paper");
     try {
@@ -591,6 +593,8 @@ export function CreatePaper() {
       ]
         .filter(Boolean)
         .join("\n\n");
+      setReadingProgress("Source text is ready. Generating your paper now…");
+      setAiRequestActive(true);
       const p = await api("generate", {
         ...settings,
         description: instructions,
@@ -633,6 +637,7 @@ export function CreatePaper() {
     } catch (e) {
       setError(e.message);
     } finally {
+      setAiRequestActive(false);
       setBusy("");
     }
   }
